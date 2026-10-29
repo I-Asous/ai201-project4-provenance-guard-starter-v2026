@@ -39,6 +39,16 @@
 <!-- The path a submission takes, from arriving to the label a reader sees.
      Six or seven steps — this is the trace you wrote in Milestone 1. -->
 
+1. **`POST /submit` arrives** with `{"text", "creator_id"}`: the raw words and who claims them.
+2. **The route checks the input.** It needs valid JSON, 20+ words, at most 20,000 characters, and a creator_id. Bad input gets a 4xx and a `rejected` log entry. Good input gets a fresh `content_id`.
+3. **Signal one, `detector.model_signal`:** gpt2 measures how predictable the text is and returns `model_score` (0–1, higher = more AI).
+4. **Signal two, `stylometry.style_signal`:** measures sentence-length spread, vocabulary variety and punctuation, and returns `style_score` (0–1, higher = more AI).
+5. **`scoring.combine_signals`** merges them into one `combined_score`.
+6. **`scoring.score_to_label`** turns that score into a `guess`, a `confidence` and the plain-English label a reader sees.
+7. **`audit.log_decision`** writes all nine fields to `logs/audit.jsonl`, and the service returns the label to the writer. They can contest it with `POST /appeal`, which appends an `under_review` entry next to the original.
+
+Full trace, false-positive walk-through and endpoint contracts: [DESIGN.md](DESIGN.md).
+
 
 
 ---
@@ -53,19 +63,19 @@
 
 ### Signal one — the model signal
 
-**What it measures:**
+**What it measures:** Perplexity: how surprised gpt2 is by each next word in the first 400 tokens, mapped to 0–1. Low perplexity gives a high score, which means "AI".
 
-**Why that might differ between human and AI writing:**
+**Why that might differ between human and AI writing:** A language model writes by picking likely next words, so its output is easy for a model to predict. People make odd choices, take abrupt turns and name specific things.
 
-**What it can't see:**
+**What it can't see:** Who chose the words. It measures predictability, not authorship. Plain writing (short sentences, common vocabulary) is predictable whoever wrote it, so second-language writers, younger writers and deliberately plain writers score as AI. It also fails the other way: AI text with rare or ornate words swapped in reads as surprising, so it reads as human. It sees nothing past 400 tokens, and jargon-heavy topics push the score toward human.
 
 ### Signal two — the style signal
 
-**What it measures:**
+**What it measures:** The surface shape of the text, without reading it. That means sentence-length spread (stdev / mean of words per sentence), type–token ratio over a fixed window, and the density of "expressive" punctuation (; — : ( ) ! ?). Each is normalised and flipped so that higher = more AI, then averaged.
 
-**Why that might differ between human and AI writing:**
+**Why that might differ between human and AI writing:** "Most likely next word" produces even, mid-length sentences and a narrower vocabulary. Human writing is lumpier: a three-word sentence next to a forty-word one, an aside in parentheses, a dash where a comma would do.
 
-**What it can't see:**
+**What it can't see:** What the text says. Anything that changes the shape without changing the substance moves it. Typos raise word variety, chopped or merged sentences raise spread, and sprinkled dashes or a pasted quotation add punctuation. All of that is cheap to do on purpose. It is unreliable on one or two sentences. It also penalises disciplined human writers who keep sentences even, such as technical, legal or house-style writing.
 
 ### The combining rule
 
