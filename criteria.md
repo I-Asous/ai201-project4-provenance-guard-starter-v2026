@@ -42,63 +42,88 @@ Two things worth knowing before you pick numbers:
   a **miss**.
 
 ---
-## 1.
+## 1. My own writing is never called AI
 
-<!-- Your criterion. It must name a number. -->
+Of 10 pieces I wrote myself, **0** are labelled high-confidence AI in **every
+one of the three trials**, and **at least 5 of 10** are labelled
+high-confidence human. At least 3 of the 10 are written plainly on purpose:
+short sentences, everyday words, no flourishes.
 
-
-
-**Why this target:**
-
-
-
----
-
-## 2.
-
-<!-- Your criterion. -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** On a writing site a wrong accusation costs the writer far
+more than a missed detection costs the site. I designed the AI label to need
+both signals strongly agreeing, so a single accusation of my own work means
+that design failed. The "at least 5 human" half stops me passing by shoving
+everything into "unsure", which would accuse nobody and tell nobody anything.
+The plain pieces are there because plain writing is what signal one is known
+to misread (see DESIGN.md §3), so a test without them would be too easy.
 
 ---
 
-## 3.
+## 2. Clearly-AI and clearly-human text score far apart
 
-<!-- Your criterion. -->
+Across 5 texts I'm confident are AI-generated (unedited model output) and 5
+I'm confident are human (my own non-plain writing plus published personal
+essays), the **mean `combined_score` of the AI set is at least 0.30 higher than
+the mean of the human set** in every trial. **At least 4 of the 5 AI texts
+score above the highest-scoring human text.**
 
-
-
-**Why this target:**
-
-
-
----
-
-## 4.
-
-<!-- Your criterion. -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** If the clear cases don't separate, no choice of
+thresholds can fix it, and the labels are just noise. 0.30 is the width of my
+planned unsure band (roughly 0.45–0.80), so a smaller gap means even the easy
+cases could end up on the wrong side of it. The overlap check catches a mean
+being dragged up by one extreme text while the rest overlap.
 
 ---
 
-## 5.
+## 3. All three labels are reachable, and borderline text lands in "unsure"
 
-<!-- Your criterion. -->
+Of 9 inputs (3 clearly AI, 3 clearly human, 3 borderline: lightly hand-edited
+AI text, or text where `model_score` and `style_score` differ by 0.4 or more),
+**each of the three labels is produced at least once in every trial**, and
+**at least 2 of the 3 borderline inputs are labelled unsure** in every trial.
+**No input whose two signals differ by 0.4 or more is ever labelled
+high-confidence AI.**
 
+**Why this target:** A label nobody can reach is a gap in the ranges, and a
+service that only ever says "unsure" is useless. Two signals disagreeing is
+exactly the uncertainty the unsure label exists for, so calling a split case AI
+would be accusing someone on half the evidence.
 
+---
 
-**Why this target:**
+## 4. Every appeal changes status and is recorded
 
+For **10 of 10** appeals against real `content_id`s: the response is `200` with
+`"status": "under_review"`, `/log` gains **exactly one** appeal entry with that
+`content_id`, the writer's reasoning stored word for word, and the
+`creator_id` copied from the original decision, and the original decision entry
+is **still there, unchanged**. For **3 of 3** appeals with a made-up
+`content_id`, the response is `404` with `"error": "unknown_content_id"` and
+**no** appeal entry is written.
 
+**Why this target:** The appeal is the only thing between a wrong accusation
+and nothing at all, so it has to work every time; 9 of 10 means one writer's
+appeal vanished. The made-up-id half checks the most common silent failure: a
+typo'd id that "succeeds" while recording nothing anyone can find. This one is
+tested by hand (submit, then appeal with the returned id), because
+`run_eval.py` only sends submissions.
+
+---
+
+## 5. Bad input is refused cleanly, never crashes
+
+Of 7 malformed `/submit` requests (empty `text`, whitespace-only `text`, no
+`text` field, `"text": null`, `"text": 12345`, a 250,000-character text, and a
+body that is a JSON list instead of an object), **7 of 7** return a `4xx` (never
+a `500`) with an `error` code and a readable `message`, **7 of 7** leave a
+`rejected` entry in the audit log, the enormous one gets its response **in
+under 2 seconds**, and `/ping` still answers afterwards.
+
+**Why this target:** A crash on malformed input is one of the most common real
+failures, and a 500 tells the caller nothing about what to fix. The log entry
+matters because an attack that only shows up as an absence is one I'll never
+find. The 2-second limit proves the size check runs *before* the model, so
+nobody can tie up the service by sending a novel.
 
 ---
 
