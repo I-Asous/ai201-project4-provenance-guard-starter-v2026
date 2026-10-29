@@ -406,7 +406,7 @@ Refused input leaves a trace too. Here's a 250,000-character body, answered with
 
 - *What I asked for:* I pasted the Milestone 1 brief into Claude Code and asked it to complete the trace, both signals' blind spots, the false-positive walk-through and the two endpoint contracts.
 - *What came back:* DESIGN.md. Its first draft defined `confidence` in a self-contradicting sentence. Claude caught that and rewrote it as `max(score, 1 − score)`. It also picked concrete bounds (20 words minimum, 20,000 characters maximum) and a target AI threshold of ~0.80 that I hadn't specified.
-- *What I changed:* <!-- TODO (you): what you kept, rejected or rewrote, in your own words -->
+- *What I changed:* Nothing in the text. I read DESIGN.md against the brief and kept it as written, including the bounds and the ~0.80 threshold target it chose. My decision was to treat it as the contract: everything I asked for afterwards had to match DESIGN.md §4, rather than letting the code redefine the endpoints.
 
 **Moment 2**
 
@@ -417,7 +417,7 @@ Refused input leaves a trace too. Here's a 250,000-character body, answered with
   - Signal one's midpoint of 45 put human essays on the AI side, so it moved to 25.
 
   With the original numbers, the person in my false-positive trace would have been labelled AI.
-- *What I changed:* <!-- TODO (you): e.g. whether you agree with the guard's trade, replaced the stand-in calibration text with your own writing, reworded a label -->
+- *What I changed:* I kept the code, weights and thresholds as they came back. What I controlled was the process. I ran the milestones one at a time and had each one checked against its own "before you move on" list. I also declined to let Claude push to GitHub and pushed myself. I'm knowingly accepting two of its trades: lightly edited AI gets labelled human, and the calibration "human" texts are stand-ins. Unit 8's run against my own writing (criterion 1) is where I'll find out whether accepting them was right.
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
