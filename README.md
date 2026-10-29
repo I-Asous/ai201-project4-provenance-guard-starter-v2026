@@ -137,14 +137,52 @@ Calibration, after both changes. The "clearly human" texts are a Thoreau excerpt
 
 **A case where my two signals split, and what my rule does with it:**
 
-An AI-style paragraph written in ornate, rare vocabulary ("The crepuscular cityscape exudes an ineffable melancholy…"), with five even, mid-length sentences:
+**Signal two on its own, from a terminal (Milestone 4):**
 
-- `model_score` **0.16**. Rare words are exactly what gpt2 can't predict, so it reads as very human. This is signal one's blind spot.
-- `style_score` **0.80**. Sentences march in step and there's no expressive punctuation, so it looks AI.
-- They differ by 0.64, so the cap applies, but the weighted average is already only 0.42. The result is **0.42 → human**.
+```
+$ python stylometry.py "Artificial intelligence is transforming the way we live and work. From healthcare to education, AI technologies are being used to improve efficiency and enhance outcomes. However, it is important to consider the ethical implications of these advancements."
+3 sentences, 37 words
 
-The rule did what it was designed to do: it didn't accuse anyone on half the evidence. But in this case the half it trusted was the half being fooled, so AI text got through. That's the trade I chose in DESIGN.md §3. A missed detection costs the site a little; a wrong accusation costs a writer a lot. Unit 8 will tell me how many of these get through.
+sentence_length_spread   0.204
+type_token_ratio         0.8649
+punctuation_density      0.0
+style_signal             0.8   (higher = more likely AI)
+```
 
+**Both signals over the same pieces.** These are the three Milestone 3 pieces, plus the formal-human input the brief asks for. I used two public-domain formal texts.
+
+| Input | words | model_score | style_score | combined | label |
+|---|---|---|---|---|---|
+| M3 sure-AI | 37 | 0.86 | 0.80 | 0.83 | ai |
+| M3 sure-human | 35 | 0.13 | 0.10 | 0.12 | human |
+| M3 in-between (lightly edited AI) | 37 | 0.27 | 0.30 | 0.28 | human |
+| Formal human: *Federalist No. 1*, opening | 133 | 0.36 | **0.78** | 0.53 | unsure |
+| Formal human: Darwin, *Origin*, introduction | 107 | 0.43 | 0.58 | 0.49 | unsure |
+
+- **They agree on the clear cases.** Both say AI on the sure-AI piece and human on the sure-human one, so clear AI and clear human score 0.71 apart.
+- **They agree on the in-between piece too, and both are wrong.** Two short sentences and an "honestly" moved *both* signals, so the rule had nothing to resolve. Lightly edited AI comes through as human. That's the miss I expect unit 8 to hit hardest.
+- **They split on formal human writing.** The case is below.
+
+**A case where my two signals split, and what my rule does with it:**
+
+*Federalist No. 1*, written by a person in 1787:
+
+- `model_score` **0.36**. Signal one leans human. Words like "inefficacy" and "subsisting" are hard for gpt2 to predict.
+- `style_score` **0.78**. Signal two leans AI. Looking at its three measures:
+  - Sentence-length spread is 0.37. The sentences are all long, so they look even.
+  - Type–token ratio is 0.75. "The" and "of" repeat across the long sentences.
+  - Expressive punctuation is 0.75 per 100 words. It's written in commas, which I deliberately don't count.
+- They differ by 0.42, which is past the 0.4 gap, so the cap applies. The weighted average is already 0.53, so the result is **unsure**.
+
+The writer isn't accused. That's what the cap is for: one signal alone can't put a real person in the AI band. But they don't get "human" either, so formal writing pays a cost in this system.
+
+The other direction exists too. An AI-style paragraph in ornate vocabulary ("The crepuscular cityscape exudes an ineffable melancholy…") scores model **0.16**, style **0.80**, and combined **0.42 → human**. The rule trusts the human-leaning signal, and here that signal is the one being fooled. That's the trade from DESIGN.md §3: a miss rather than an accusation.
+
+**Findings to carry into unit 8:**
+
+- **Type–token ratio doesn't discriminate the way I expected.** It scored 0.00 AI-ness on every AI text (generated prose is varied enough at 40–100 words). It only pushed toward AI on human text: plain (1.00), formal (0.70–0.77) and Thoreau (0.44). It's kept at weight 0.20 so I can measure it in unit 8, but on this evidence it adds false-positive pressure and catches nothing.
+- **Signal two reads formal human prose as AI-leaning**, for the three reasons in the Federalist breakdown above. If my own writing is formal, criterion 1's "at least 5 of 10 human" is at risk.
+- **The log records all three numbers.** Every `decided` entry has `model_score`, `style_score` and `combined_score`, as the Sample Run's log output shows.
 
 ---
 
