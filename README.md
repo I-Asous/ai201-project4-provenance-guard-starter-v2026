@@ -69,6 +69,24 @@ Full trace, false-positive walk-through and endpoint contracts: [DESIGN.md](DESI
 
 **What it can't see:** Who chose the words. It measures predictability, not authorship. Plain writing (short sentences, common vocabulary) is predictable whoever wrote it, so second-language writers, younger writers and deliberately plain writers score as AI. It also fails the other way: AI text with rare or ornate words swapped in reads as surprising, so it reads as human. It sees nothing past 400 tokens, and jargon-heavy topics push the score toward human.
 
+**Run on its own before wiring it in (Milestone 3):**
+
+```
+$ python detector.py "Artificial intelligence is transforming the way we live and work. From healthcare to education, ..."
+perplexity     12.2
+model_signal   0.8579   (higher = more likely AI)
+
+$ python detector.py "Okay so the bus was late again. Third time this week! I stood there in the rain like an idiot, ..."
+perplexity     52.9
+model_signal   0.1330   (higher = more likely AI)
+
+$ python detector.py "Remote work has changed a lot about how teams operate, honestly more than most of us expected. ..."
+perplexity     37.0
+model_signal   0.2732   (higher = more likely AI)
+```
+
+Sure-AI, sure-human, in-between. It puts them in the right order, but the in-between one (AI text with a few human touches) already leans human, at 0.27. A couple of short sentences and an "honestly" were enough to move it. These runs use the recalibrated curve (midpoint 25), described under The combining rule.
+
 ### Signal two — the style signal
 
 **What it measures:** The surface shape of the text, without reading it. That means sentence-length spread (stdev / mean of words per sentence), type–token ratio over a fixed window, and the density of "expressive" punctuation (; — : ( ) ! ?). Each is normalised and flipped so that higher = more AI, then averaged.
