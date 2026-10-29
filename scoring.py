@@ -57,17 +57,20 @@ LABEL_HUMAN = (
     "This reads like it was written by a person. Nothing in it looked "
     "machine-generated to us."
 )
+# Revised in Milestone 5 after reading them as the writer would. The first
+# unsure label called the writing "plain", which is wrong and stings for formal
+# writers (who land here too), and the AI label's "nothing is final until
+# then" implied a penalty this service doesn't have. README has the before/after.
 LABEL_UNSURE = (
-    "We can't tell either way, so we're not making a call on this one. Plain, "
-    "clear writing often looks like this, and many people write this way "
-    "themselves. Nothing has been flagged and nothing changes for you. If you'd "
-    "like a person to take a look, you can ask for a review."
+    "We couldn't tell from this piece how it was written, so we're not making "
+    "a call. A lot of writing by real people lands here, especially very plain "
+    "or very formal writing. Nothing has been flagged and nothing changes for "
+    "you. If you'd still like a person to look at it, you can ask for a review."
 )
 LABEL_AI = (
-    "This looks like it was probably written with an AI tool. Both of our "
-    "checks pointed the same way, but they can be wrong. If you wrote this "
-    "yourself, ask for a review and a person will look at it. Nothing is final "
-    "until then."
+    "This looks like it was probably written with an AI tool. That's our best "
+    "guess, not a finding about you, and it can be wrong. If you wrote this "
+    "yourself, ask for a review and a person will look at it."
 )
 
 

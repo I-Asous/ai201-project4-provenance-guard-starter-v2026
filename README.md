@@ -196,8 +196,8 @@ The other direction exists too. An AI-style paragraph in ornate vocabulary ("The
 | Label | Score range | The exact text a reader sees |
 |---|---|---|
 | high-confidence human | 0.00 – 0.45 (below 0.45) | This reads like it was written by a person. Nothing in it looked machine-generated to us. |
-| unsure | 0.45 – 0.75 (from 0.45, below 0.75) | We can't tell either way, so we're not making a call on this one. Plain, clear writing often looks like this, and many people write this way themselves. Nothing has been flagged and nothing changes for you. If you'd like a person to take a look, you can ask for a review. |
-| high-confidence AI | 0.75 – 1.00 (0.75 and up) | This looks like it was probably written with an AI tool. Both of our checks pointed the same way, but they can be wrong. If you wrote this yourself, ask for a review and a person will look at it. Nothing is final until then. |
+| unsure | 0.45 – 0.75 (from 0.45, below 0.75) | We couldn't tell from this piece how it was written, so we're not making a call. A lot of writing by real people lands here, especially very plain or very formal writing. Nothing has been flagged and nothing changes for you. If you'd still like a person to look at it, you can ask for a review. |
+| high-confidence AI | 0.75 – 1.00 (0.75 and up) | This looks like it was probably written with an AI tool. That's our best guess, not a finding about you, and it can be wrong. If you wrote this yourself, ask for a review and a person will look at it. |
 
 All three are reachable, as the calibration table above and the Sample Run show. The text lives in `scoring.py` (`LABEL_HUMAN`, `LABEL_UNSURE`, `LABEL_AI`).
 
@@ -206,16 +206,33 @@ All three are reachable, as the calibration table above and the Sample Run show.
      sounding like an accusation, because the person reading it may well have
      written every word themselves. -->
 
-The person most likely to get "unsure" is the plain writer from DESIGN.md §3. In calibration, that's exactly where she landed. So the label is written for her:
+The people who land in "unsure" are mostly real writers: the plain writer from DESIGN.md §3 (0.67) and formal writers like *Federalist No. 1* (0.53). The label is written for them:
 
-- **"We can't tell either way"** says the uncertainty is ours, not something wrong with her writing.
-- **"Plain, clear writing often looks like this, and many people write this way themselves"** tells her *why* we couldn't tell, and that it isn't a mark against her. Without that, "unsure" reads as "suspected".
-- **"Nothing has been flagged and nothing changes for you"** answers the first thing she'd worry about.
-- **"If you'd like a person to take a look"** offers the appeal without implying she needs one.
+- **"We couldn't tell from this piece how it was written"** puts the uncertainty on us and on this one piece, not on the writer.
+- **"A lot of writing by real people lands here, especially very plain or very formal writing"** says why, with both of the causes I actually observed. It reassures without assuming anything about this writer's style.
+- **"Nothing has been flagged and nothing changes for you"** answers the first worry.
+- **"If you'd still like a person to look at it"** offers the appeal without implying they need one.
 
-It avoids "AI", "detected", "score" and "confidence". None of those words help someone who has never heard of a threshold.
+It avoids "AI", "detected", "score" and "confidence".
 
+**Reader check (Milestone 5).** Working alone, I read all three labels as the writer: what does this say about me, and what would I do next? Here's what that turned up:
 
+| Label | What the writer heard | What they'd do |
+|---|---|---|
+| human | "They checked me for cheating, but I passed." | Nothing. |
+| unsure (v1) | "Plain, clear writing often looks like this" = *they think my writing is simple*. That's wrong and stings for a formal writer. "Many people write this way **themselves**" sounds like they're defending me against a suspicion, which raises it. "Nothing has been flagged" next to "ask for a review" leaves them asking what there is to review. | Ignore it uneasily, or appeal just to clear their name. |
+| AI (v1) | "Both of our checks pointed the same way" sounds like the evidence is piling up. "Nothing is final until then" makes them ask what becomes final, and implies a penalty. | Appeal anxiously, believing something bad happens if they don't. |
+
+What I changed:
+
+- **Unsure:** dropped "plain, clear" (formal writers land here too) and "themselves", and named both causes I'd observed.
+- **AI:** replaced "both of our checks" with "our best guess, not a finding about you", and removed "nothing is final until then". This service doesn't penalise anyone, so the label shouldn't suggest it might.
+
+The v1 wording:
+
+> *unsure v1:* We can't tell either way, so we're not making a call on this one. Plain, clear writing often looks like this, and many people write this way themselves. Nothing has been flagged and nothing changes for you. If you'd like a person to take a look, you can ask for a review.
+>
+> *AI v1:* This looks like it was probably written with an AI tool. Both of our checks pointed the same way, but they can be wrong. If you wrote this yourself, ask for a review and a person will look at it. Nothing is final until then.
 
 ---
 
@@ -224,14 +241,12 @@ It avoids "AI", "detected", "score" and "confidence". None of those words help s
 <!-- One submission and one appeal, pasted as text: the request, the response,
      and the log entries. -->
 
-**A submission**
+**A submission.** I ran one for each label to show all three are reachable. These are test inputs: generic AI text, my plain-writer stand-in from DESIGN.md §3, and a casual human-style paragraph.
 
 <!-- The response needs content_id, guess, confidence, label, AND both
-     signal scores - model_score and style_score. Unit 8's tools read those
-     two off the response, so leaving them out costs you next unit's
-     diagnostics. -->
+     signal scores - model_score and style_score. -->
 
-A test input: generic AI-generated text about exercise.
+*High-confidence AI*
 
 ```bash
 $ curl -X POST http://127.0.0.1:5000/submit \
@@ -243,86 +258,141 @@ $ curl -X POST http://127.0.0.1:5000/submit \
 {
   "combined_score": 0.8606,
   "confidence": 0.8606,
-  "content_id": "0e30ed66-6666-4fdf-bd67-b5ad42028eb1",
+  "content_id": "12398bcc-0729-4957-8727-a0db5ee06490",
   "creator_id": "islam",
   "guess": "ai",
-  "label": "This looks like it was probably written with an AI tool. Both of our checks pointed the same way, but they can be wrong. If you wrote this yourself, ask for a review and a person will look at it. Nothing is final until then.",
+  "label": "This looks like it was probably written with an AI tool. That's our best guess, not a finding about you, and it can be wrong. If you wrote this yourself, ask for a review and a person will look at it.",
   "model_score": 0.9194,
   "status": "decided",
   "style_score": 0.7724
 }
 ```
 
-**An appeal**
+*Unsure*
 
-The appeal's reasoning is role-played test input, to exercise the path.
+```bash
+$ curl -X POST http://127.0.0.1:5000/submit \
+  -H "Content-Type: application/json" \
+  -d '{"text": "I moved to this city in November. It was very cold. I did not have a good coat. My neighbor gave me her old coat. It was too big but I wore it every day. I took the bus to my English class. The class was in the morning. My teacher was kind. She helped me with my writing. I wrote about my family and my country. I miss my mother and my sisters. We talk on the phone on Sundays. Now it is spring and the weather is better. I am happy that I came here.", "creator_id": "islam"}'
+```
+
+```json
+{
+  "combined_score": 0.6676,
+  "confidence": 0.6676,
+  "content_id": "556dbdf9-0516-4750-82be-904398d93485",
+  "creator_id": "islam",
+  "guess": "unsure",
+  "label": "We couldn't tell from this piece how it was written, so we're not making a call. A lot of writing by real people lands here, especially very plain or very formal writing. Nothing has been flagged and nothing changes for you. If you'd still like a person to look at it, you can ask for a review.",
+  "model_score": 0.7793,
+  "status": "decided",
+  "style_score": 0.5
+}
+```
+
+*High-confidence human*
+
+```bash
+$ curl -X POST http://127.0.0.1:5000/submit \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Okay so the bus was late again. Third time this week! I stood there in the rain like an idiot, checking the app every thirty seconds, and it kept saying two minutes for about twenty. When it finally came the driver just shrugged. Fine. Whatever. I got to work soaked, my boss gave me that look (you know the one), and the coffee machine was broken.", "creator_id": "islam"}'
+```
+
+```json
+{
+  "combined_score": 0.0977,
+  "confidence": 0.9023,
+  "content_id": "f99e3d3e-eb94-4be2-a5c6-7058a92eb526",
+  "creator_id": "islam",
+  "guess": "human",
+  "label": "This reads like it was written by a person. Nothing in it looked machine-generated to us.",
+  "model_score": 0.1629,
+  "status": "decided",
+  "style_score": 0.0
+}
+```
+
+**An appeal** against the AI-labelled submission above, using its real `content_id`:
 
 ```bash
 $ curl -X POST http://127.0.0.1:5000/appeal \
   -H "Content-Type: application/json" \
-  -d '{"content_id": "0e30ed66-6666-4fdf-bd67-b5ad42028eb1", "reasoning": "I wrote this for a health class handout. It sounds generic because the assignment asked for a neutral summary."}'
+  -d '{"content_id": "12398bcc-0729-4957-8727-a0db5ee06490", "reasoning": "Testing the appeal path: contesting this AI label to check it moves to under_review."}'
 ```
 
 ```json
 {
-  "content_id": "0e30ed66-6666-4fdf-bd67-b5ad42028eb1",
+  "content_id": "12398bcc-0729-4957-8727-a0db5ee06490",
   "message": "Thanks. Your appeal is recorded and a person will review this decision. The original result is on hold until then.",
-  "original_label": "This looks like it was probably written with an AI tool. Both of our checks pointed the same way, but they can be wrong. If you wrote this yourself, ask for a review and a person will look at it. Nothing is final until then.",
+  "original_label": "This looks like it was probably written with an AI tool. That's our best guess, not a finding about you, and it can be wrong. If you wrote this yourself, ask for a review and a person will look at it.",
   "status": "under_review"
 }
 ```
 
-An appeal against an id that doesn't exist:
+An appeal against an id that doesn't exist returns HTTP 404, and nothing is written to the log:
 
 ```json
 {"error": "unknown_content_id", "message": "We couldn't find a submission with id not-a-real-id. Check it matches the one you were given."}
 ```
-(HTTP 404; nothing is written to the log.)
 
 **What the log shows afterwards**
 
 ```bash
-$ curl "http://127.0.0.1:5000/log?limit=3"
+$ curl "http://127.0.0.1:5000/log?limit=4"
 ```
 
 ```json
 {
-  "count": 3,
+  "count": 4,
   "entries": [
     {
-      "content_id": "7f11a761-51db-45df-871a-eed8e6a0a8b4",
-      "creator_id": "islam",
-      "event": "appeal",
-      "reasoning": "I wrote this myself for my English class. I keep my sentences simple on purpose.",
-      "status": "under_review",
-      "timestamp": "2026-10-29T00:27:21+00:00"
-    },
-    {
       "combined_score": 0.8606,
-      "content_id": "0e30ed66-6666-4fdf-bd67-b5ad42028eb1",
+      "content_id": "12398bcc-0729-4957-8727-a0db5ee06490",
       "creator_id": "islam",
       "guess": "ai",
-      "label": "This looks like it was probably written with an AI tool. Both of our checks pointed the same way, but they can be wrong. If you wrote this yourself, ask for a review and a person will look at it. Nothing is final until then.",
+      "label": "This looks like it was probably written with an AI tool. That's our best guess, not a finding about you, and it can be wrong. If you wrote this yourself, ask for a review and a person will look at it.",
       "model_score": 0.9194,
       "status": "decided",
       "style_score": 0.7724,
-      "timestamp": "2026-10-29T00:27:30+00:00"
+      "timestamp": "2026-10-29T01:50:12+00:00"
     },
     {
-      "content_id": "0e30ed66-6666-4fdf-bd67-b5ad42028eb1",
+      "combined_score": 0.6676,
+      "content_id": "556dbdf9-0516-4750-82be-904398d93485",
+      "creator_id": "islam",
+      "guess": "unsure",
+      "label": "We couldn't tell from this piece how it was written, so we're not making a call. A lot of writing by real people lands here, especially very plain or very formal writing. Nothing has been flagged and nothing changes for you. If you'd still like a person to look at it, you can ask for a review.",
+      "model_score": 0.7793,
+      "status": "decided",
+      "style_score": 0.5,
+      "timestamp": "2026-10-29T01:50:12+00:00"
+    },
+    {
+      "combined_score": 0.0977,
+      "content_id": "f99e3d3e-eb94-4be2-a5c6-7058a92eb526",
+      "creator_id": "islam",
+      "guess": "human",
+      "label": "This reads like it was written by a person. Nothing in it looked machine-generated to us.",
+      "model_score": 0.1629,
+      "status": "decided",
+      "style_score": 0.0,
+      "timestamp": "2026-10-29T01:50:12+00:00"
+    },
+    {
+      "content_id": "12398bcc-0729-4957-8727-a0db5ee06490",
       "creator_id": "islam",
       "event": "appeal",
-      "reasoning": "I wrote this for a health class handout. It sounds generic because the assignment asked for a neutral summary.",
+      "reasoning": "Testing the appeal path: contesting this AI label to check it moves to under_review.",
       "status": "under_review",
-      "timestamp": "2026-10-29T00:27:30+00:00"
+      "timestamp": "2026-10-29T01:50:12+00:00"
     }
   ]
 }
 ```
 
-The original decision is still there, unchanged. The appeal sits after it, and the `creator_id` on the appeal comes from the decision, not from the request. The first entry is an appeal from an earlier test submission.
+The first entry is the original AI decision, with `status: decided`. The last is the appeal against the same `content_id`, with `status: under_review`. The log is append-only, so the decision isn't overwritten: the appeal sits next to it, and the item's current status is that of its latest entry. The appeal's `creator_id` is copied from the decision, not taken from the request.
 
-Refused input leaves a trace too. Here's the 250,000-character body, answered with a 413 before the model ran:
+Refused input leaves a trace too. Here's a 250,000-character body, answered with a 413 before the model ran:
 
 ```json
 {"timestamp": "2026-10-29T00:27:21+00:00", "creator_id": "b6", "event": "rejected", "status": "rejected", "reason": "text_too_long", "http_status": 413, "text_length": 250000}
