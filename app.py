@@ -38,7 +38,7 @@ app = Flask(__name__)
 
 
 # ── Rate limiting — UNIT 8 ────────────────────────────────────────────────────
-# Off until you turn it on. In unit 8, Milestone 1:
+# On since unit 8, Milestone 1 (numbers and reasons in config.py):
 #
 #   1. Set RATE_LIMITING_ENABLED = True in config.py (or AI201_RATE_LIMITS=1)
 #   2. Choose your numbers there
@@ -109,7 +109,12 @@ if config.RATE_LIMITING_ENABLED:
         audit.log_rejection(
             creator_id=payload.get("creator_id", "unknown"),
             reason="rate_limited",
+            http_status=429,
+            route=request.path,
             limit=str(exc.description),
+            # What the limiter actually counted this request against — the
+            # creator_id, or the address when there wasn't one.
+            counted_as=rate_limit_key(),
         )
         return jsonify({
             "error": "rate_limited",
@@ -154,7 +159,7 @@ def health():
 # ── YOU BUILD THIS ────────────────────────────────────────────────────────────
 
 @app.post("/submit")
-# @limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
+@limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
 def submit():
     """
     Take a piece of text, decide about it, log the decision, answer.
@@ -240,7 +245,8 @@ MAX_TEXT_CHARS = 20_000
 
 def _reject(creator_id, status_code, error, message, **extra):
     """Refuse a request, and leave a trace of it in the log."""
-    audit.log_rejection(creator_id=creator_id, reason=error, http_status=status_code, **extra)
+    audit.log_rejection(creator_id=creator_id, reason=error, http_status=status_code,
+                        route=request.path, **extra)
     return jsonify({"error": error, "message": message}), status_code
 
 
@@ -259,31 +265,38 @@ def appeal():
     This is the smallest endpoint in the project and the one that matters most
     to the person on the other end.
     """
+    # Refusals here are logged too, like /submit's. A run of 404s for ids that
+    # don't exist is what someone guessing at content_ids looks like.
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
-        return jsonify({"error": "invalid_json",
-                        "message": "Send a JSON object like {\"content_id\": \"...\", \"reasoning\": \"...\"}."}), 400
+        return _reject("unknown", 400, "invalid_json",
+                       "Send a JSON object like {\"content_id\": \"...\", \"reasoning\": \"...\"}.")
 
     content_id = payload.get("content_id")
     reasoning = payload.get("reasoning")
     if not isinstance(content_id, str) or not content_id.strip():
-        return jsonify({"error": "missing_content_id",
-                        "message": "Include the content_id you got back when you submitted."}), 400
-    if not isinstance(reasoning, str) or not reasoning.strip():
-        return jsonify({"error": "missing_reasoning",
-                        "message": "Tell us briefly why you think the result is wrong."}), 400
+        return _reject("unknown", 400, "missing_content_id",
+                       "Include the content_id you got back when you submitted.")
 
-    content_id = content_id.strip()
+    # Capped, because this string comes from the caller and goes into the log.
+    content_id = content_id.strip()[:100]
     decisions = [e for e in audit.entries_for(content_id) if e.get("status") == "decided"]
+    if not isinstance(reasoning, str) or not reasoning.strip():
+        return _reject(decisions[0]["creator_id"] if decisions else "unknown", 400,
+                       "missing_reasoning",
+                       "Tell us briefly why you think the result is wrong.",
+                       content_id=content_id)
     if not decisions:
-        return jsonify({"error": "unknown_content_id",
-                        "message": f"We couldn't find a submission with id {content_id}. "
-                                   "Check it matches the one you were given."}), 404
+        return _reject("unknown", 404, "unknown_content_id",
+                       f"We couldn't find a submission with id {content_id}. "
+                       "Check it matches the one you were given.",
+                       content_id=content_id)
 
     # The creator comes from the original decision, not the request, so nobody
     # can file an appeal under someone else's name.
     original = decisions[0]
-    audit.log_appeal(content_id=content_id, creator_id=original["creator_id"], reasoning=reasoning)
+    audit.log_appeal(content_id=content_id, creator_id=original["creator_id"],
+                     reasoning=reasoning, original=original)
     return jsonify({
         "content_id": content_id,
         "status": "under_review",

@@ -425,25 +425,25 @@ Refused input leaves a trace too. Here's a 250,000-character body, answered with
 
 ## Rate Limiting
 
-**My limits:** ___ per minute, ___ per day
+**My limits:** 5 per minute, 50 per day
 
 **Why those numbers and not others:**
-<!-- Think about two people: a real writer submitting their own work a few
-     times an hour, and a script sending a thousand variations to map your
-     thresholds. Your numbers have to be liveable for the first and hostile to
-     the second. -->
 
-**What a caller counts as:** <!-- per address, or per creator_id? They fail
-differently — one script can look like a thousand callers, and one household
-can look like one. -->
+- **The writer.** Someone checking their own work submits a piece, edits a paragraph, and checks again. That's one submission every minute or two. Five a minute leaves room for a quick burst of revisions. On a heavy writing day they might check 10–20 times, so 50 a day is well above what a real person needs. If they do hit the minute limit, they wait under a minute. Nothing is lost.
+- **The script.** Mapping my thresholds means sending hundreds or thousands of small variations and watching where the label flips. At 50 a day, 1,000 variations take 20 days on one creator_id. At 5 a minute, it can't fire off a quick burst either. Each submission also runs the language model for a second or two, so the per-minute limit protects the service, not just the thresholds.
+- **Why not tighter.** At 2 or 3 a minute, a writer pasting in a few short pieces back to back would hit the limit during normal use. Below about 30 a day, one long editing session could use up the whole day's allowance.
+
+**What a caller counts as:** the `creator_id` in the request body, falling back to the caller's address when there isn't one (`rate_limit_key` in `app.py`). This is fair to a household or classroom behind one address, because each writer gets their own count. The weakness is that `creator_id` is self-reported. A script that invents a new `creator_id` on every request is a new caller each time and never hits a limit. That's how the attack set gets through (every row is `attacker_<id>`). Per-creator limits stop a careless flood. They don't stop someone who reads the API. Closing that gap needs a second limit keyed on address, or a `creator_id` the service issues itself.
 
 **The run of status codes when I pushed past it:**
 
 <!-- python run_attacks.py --flood 15 -->
 
 ```
-
+200 200 200 200 200 429 429 429 429 429 429 429 429 429 429
 ```
+
+All ten 429s are in `logs/audit.jsonl` as `rejected` entries with `"reason": "rate_limited"`, `"limit": "5 per 1 minute"` and `"counted_as": "flood_tester"`. Every log line (decision, appeal or rejection) carries the same nine fields: `timestamp`, `content_id`, `creator_id`, `guess`, `model_score`, `style_score`, `combined_score`, `label`, `status`. A field that doesn't apply is `null`, not missing. Rejections from `/submit` and `/appeal` record `reason`, `http_status` and `route`. Appeals copy the contested decision's scores and label, so the appeal line shows what was challenged without looking up the original.
 
 ---
 

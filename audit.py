@@ -27,9 +27,23 @@ import config
 
 _lock = threading.Lock()
 
+# The nine fields every entry carries — decisions, appeals and rejections
+# alike. A field that doesn't apply is null rather than missing, so every line
+# has the same shape and can be read without knowing which code wrote it.
+FIELDS = ("timestamp", "content_id", "creator_id", "guess", "model_score",
+          "style_score", "combined_score", "label", "status")
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _entry(**fields) -> dict:
+    """The nine fields first (null unless given), then anything extra."""
+    entry = {name: None for name in FIELDS}
+    entry["timestamp"] = _now()
+    entry.update(fields)
+    return entry
 
 
 def log_decision(
@@ -58,22 +72,21 @@ def log_decision(
     Anything extra you pass gets written too — useful for `rejected` entries in
     unit 8, where there's no decision but you still want the trace.
     """
-    entry = {
-        "timestamp": _now(),
-        "content_id": content_id,
-        "creator_id": creator_id,
-        "guess": guess,
-        "model_score": model_score,
-        "style_score": style_score,
-        "combined_score": combined_score,
-        "label": label,
-        "status": status,
-    }
-    entry.update(extra)
-    return _append(entry)
+    return _append(_entry(
+        content_id=content_id,
+        creator_id=creator_id,
+        guess=guess,
+        model_score=model_score,
+        style_score=style_score,
+        combined_score=combined_score,
+        label=label,
+        status=status,
+        **extra,
+    ))
 
 
-def log_appeal(content_id: str, creator_id: str, reasoning: str) -> dict:
+def log_appeal(content_id: str, creator_id: str, reasoning: str,
+               original: dict | None = None) -> dict:
     """
     Record an appeal beside the original decision.
 
@@ -81,15 +94,25 @@ def log_appeal(content_id: str, creator_id: str, reasoning: str) -> dict:
     decision stays exactly where it was and the appeal sits after it — which is
     the whole point of an audit log. Someone reading it later can see what was
     decided, that it was challenged, and in what order.
+
+    `original` is the decision being contested. Its guess, scores and label are
+    copied onto the appeal line, so the line on its own says what was
+    challenged — a reviewer doesn't have to go and find the decision first.
     """
-    return _append({
-        "timestamp": _now(),
-        "content_id": content_id,
-        "creator_id": creator_id,
-        "event": "appeal",
-        "status": "under_review",
-        "reasoning": reasoning,
-    })
+    original = original or {}
+    return _append(_entry(
+        content_id=content_id,
+        creator_id=creator_id,
+        guess=original.get("guess"),
+        model_score=original.get("model_score"),
+        style_score=original.get("style_score"),
+        combined_score=original.get("combined_score"),
+        label=original.get("label"),
+        status="under_review",
+        event="appeal",
+        decided_at=original.get("timestamp"),
+        reasoning=reasoning,
+    ))
 
 
 def log_rejection(creator_id: str, reason: str, **extra) -> dict:
@@ -101,15 +124,17 @@ def log_rejection(creator_id: str, reason: str, **extra) -> dict:
     **an attack that shows up only as an absence is one you'll never find.** A
     thousand requests that got a 429 and left no trace look exactly like a
     quiet afternoon.
+
+    No decision was made, so guess, the scores and label are null. content_id
+    is null too, unless the request named one (an appeal that was refused).
     """
-    return _append({
-        "timestamp": _now(),
-        "creator_id": creator_id,
-        "event": "rejected",
-        "status": "rejected",
-        "reason": reason,
+    return _append(_entry(
+        creator_id=creator_id,
+        status="rejected",
+        event="rejected",
+        reason=reason,
         **extra,
-    })
+    ))
 
 
 def _append(entry: dict) -> dict:
