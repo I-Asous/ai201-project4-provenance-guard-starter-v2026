@@ -473,19 +473,244 @@ whose work got caught by it:
 
 <!-- Your five criteria across three trials. `run_eval.py --label before`. -->
 
+Produced by `python run_eval.py --label before`, against the service on port 5055. Full output: [results/run_2026-11-08_1555_before.md](results/run_2026-11-08_1555_before.md).
+
+> ⚠️ **Criterion 1 ran on stand-ins, not my own writing.** No real writing was supplied for this run. The ten "my own writing" pieces in `scenarios.py` (`MY_WRITING`) were written by Claude in the style of ordinary personal writing: three plain on purpose, seven looser. Two of the seven also stand in for "my own non-plain writing" in criterion 2's human set. A MET on criterion 1 here shows how the service treats human-*style* text from a model. It says nothing about how it treats mine.
+
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |
+| 1. My own writing is never called AI *(stand-ins)* | 0 of 10 AI **and** ≥ 5 of 10 human | 0 AI, 8 human | 0 AI, 8 human | 0 AI, 8 human | MET (on stand-ins) |
+| 2. Clearly-AI and clearly-human text score far apart | AI mean ≥ 0.30 above human mean **and** ≥ 4 of 5 AI above the top human | gap 0.43, 4 of 5 | gap 0.43, 4 of 5 | gap 0.43, 4 of 5 | MET |
+| 3. All three labels reachable, borderline lands in unsure | 3 of 3 labels, ≥ 2 of 3 borderline unsure, 0 split inputs labelled AI | 3 of 3, 3 of 3, 0 | 3 of 3, 3 of 3, 0 | 3 of 3, 3 of 3, 0 | MET |
+| 4. Every appeal changes status and is recorded | 10 of 10 real appeals **and** 3 of 3 made-up ids refused | 10/10, 3/3 | 10/10, 3/3 | 10/10, 3/3 | MET |
+| 5. Bad input is refused cleanly, never crashes | 7 of 7 4xx with error + message, 7 of 7 logged, huge one < 2 s, /ping answers | 7/7, 7/7, 0.001 s, 200 | 7/7, 7/7, 0.001 s, 200 | 7/7, 7/7, 0.001 s, 200 | MET |
 
-**Real output from one trial**, pasted as text, naming the file and function
-that produced it:
+**What's behind each row**
+
+- **All three trials are identical**, to four decimal places, on every input. gpt2 runs in eval mode under `no_grad` with no sampling (`detector.py`), and the style signal is arithmetic, so a stable pipeline should look exactly like this.
+- **Criterion 1.** No piece came near AI; the highest scored 0.60. The plain pieces did worst, as DESIGN.md §3 predicted. Two of the three landed unsure (0.60 and 0.51), and the third got "human" by 0.004 (0.4463 against the 0.45 line). All seven looser pieces were human (0.11–0.40).
+- **Criterion 2** passed its overlap check with no room to spare. The reading-benefits AI text scored 0.4649, just *below* Hazlitt's essay at 0.4713, so it is the one AI text that doesn't clear the top human. Hazlitt scores that high because his signals split: model 0.24, style 0.82. The criterion doesn't count this, but only 3 of the 5 unedited AI texts were labelled AI. The other two landed unsure (0.71 and 0.46).
+- **Criterion 3.** Two inputs split by 0.4 or more: Hazlitt (0.58) and *Federalist No. 1* (0.47). Both were labelled unsure, never AI. The ornate AI text was included as borderline because a similar paragraph split 0.16 / 0.80 in Milestone 4. This one scored 0.42 / 0.79, a 0.36 gap, so it didn't split, though it still landed unsure. The lightly edited AI text landed unsure at 0.4688, only 0.019 above the human line. In Milestone 4 a different light edit of the same kind of paragraph scored 0.28, which is human, so this pass is fragile.
+- **Criterion 4 was tested by script, not by hand** as `criteria.md` planned. I extended `run_eval.py` with `appeal_trial`. It submits each of ten texts (covering all three labels), appeals the returned `content_id` and reads `/log`. Then it appeals three ids that were never issued: a one-character typo of a real id, a fresh UUID, and `my-essay-<n>`. That's 39 appeals across three trials, all handled correctly.
+- **Criterion 5.** The 250,000-character body was refused in about a millisecond, so the size check runs before the model. Every refusal's `rejected` log line names the same reason and status the caller got (`log_matches`). One weakness the criterion doesn't measure: five of the seven get the same `missing_text` code and message, whether the caller sent nothing, whitespace, `null` or the number 12345.
+
+**Real output from trial 1**, pasted verbatim from `results/run_2026-11-08_1555_before.md`. It was produced by `run_eval.py::main` (criterion 4 by `run_eval.py::appeal_trial`) from the responses of `app.py::submit` and `app.py::appeal`. `sent` is `run_eval.py`'s short note of what it sent; the full texts are in `scenarios.py`.
+
+**Criterion 1**: the three plain stand-ins, which are the riskiest of the ten (entries 1–3 of 10).
 
 ```json
+[
+  {
+    "status": 200,
+    "elapsed_s": 3.515,
+    "content_id": "3d508644-1417-4f77-a3ea-f11b26d986e2",
+    "guess": "human",
+    "confidence": 0.5537,
+    "model_score": 0.4169,
+    "style_score": 0.4904,
+    "combined_score": 0.4463,
+    "label": "This reads like it was written by a person. Nothing in it looked machine-generated to us.",
+    "sent": "I work at a grocery store on weekends. I mostly stock shelves. Sometim… (567 characters)"
+  },
+  {
+    "status": 200,
+    "elapsed_s": 0.058,
+    "content_id": "0bb3e847-41e5-4c0f-b7c6-aff97b059769",
+    "guess": "unsure",
+    "confidence": 0.5999,
+    "model_score": 0.6576,
+    "style_score": 0.5134,
+    "combined_score": 0.5999,
+    "label": "We couldn't tell from this piece how it was written, so we're not making a call. A lot of writing by real people lands here, especially very plain or very formal writing. Nothing has been flagged and nothing changes for you. If you'd still like a person to look at it, you can ask for a review.",
+    "sent": "My brother and I fixed his bike on Sunday. The chain kept falling off.… (544 characters)"
+  },
+  {
+    "status": 200,
+    "elapsed_s": 0.054,
+    "content_id": "e9a68d6d-9688-4a40-ad9c-73a4f605dabc",
+    "guess": "unsure",
+    "confidence": 0.5067,
+    "model_score": 0.5448,
+    "style_score": 0.4495,
+    "combined_score": 0.5067,
+    "label": "We couldn't tell from this piece how it was written, so we're not making a call. A lot of writing by real people lands here, especially very plain or very formal writing. Nothing has been flagged and nothing changes for you. If you'd still like a person to look at it, you can ask for a review.",
+    "sent": "Last winter our heater stopped working. It was a Tuesday in January. W… (528 characters)"
+  }
+]
+```
 
+**Criterion 2**: the lowest-scoring AI text and the highest-scoring human text, the pair that decides the overlap check (entries 5 and 8 of 10).
+
+```json
+[
+  {
+    "status": 200,
+    "elapsed_s": 0.053,
+    "content_id": "e772dc87-5307-4c18-b212-f3724f20d8fc",
+    "guess": "unsure",
+    "confidence": 0.5351,
+    "model_score": 0.5404,
+    "style_score": 0.3516,
+    "combined_score": 0.4649,
+    "label": "We couldn't tell from this piece how it was written, so we're not making a call. A lot of writing by real people lands here, especially very plain or very formal writing. Nothing has been flagged and nothing changes for you. If you'd still like a person to look at it, you can ask for a review.",
+    "sent": "Reading regularly provides numerous benefits for personal growth and d… (672 characters)"
+  },
+  {
+    "status": 200,
+    "elapsed_s": 0.061,
+    "content_id": "fe2ef0e4-9d75-47ea-a83e-1f5831e54702",
+    "guess": "unsure",
+    "confidence": 0.5287,
+    "model_score": 0.2411,
+    "style_score": 0.8167,
+    "combined_score": 0.4713,
+    "label": "We couldn't tell from this piece how it was written, so we're not making a call. A lot of writing by real people lands here, especially very plain or very formal writing. Nothing has been flagged and nothing changes for you. If you'd still like a person to look at it, you can ask for a review.",
+    "sent": "One of the pleasantest things in the world is going a journey; but I l… (605 characters)"
+  }
+]
+```
+
+**Criterion 3**: the three borderline inputs (entries 7–9 of 9).
+
+```json
+[
+  {
+    "status": 200,
+    "elapsed_s": 0.062,
+    "content_id": "415c71a0-3f31-4a52-8e7b-c13288dcc7a6",
+    "guess": "unsure",
+    "confidence": 0.5004,
+    "model_score": 0.3144,
+    "style_score": 0.7794,
+    "combined_score": 0.5004,
+    "label": "We couldn't tell from this piece how it was written, so we're not making a call. A lot of writing by real people lands here, especially very plain or very formal writing. Nothing has been flagged and nothing changes for you. If you'd still like a person to look at it, you can ask for a review.",
+    "sent": "After an unequivocal experience of the inefficacy of the subsisting fe… (809 characters)"
+  },
+  {
+    "status": 200,
+    "elapsed_s": 0.062,
+    "content_id": "af555af1-ba06-4c04-bf00-c06e17fde06f",
+    "guess": "unsure",
+    "confidence": 0.5685,
+    "model_score": 0.4229,
+    "style_score": 0.7868,
+    "combined_score": 0.5685,
+    "label": "We couldn't tell from this piece how it was written, so we're not making a call. A lot of writing by real people lands here, especially very plain or very formal writing. Nothing has been flagged and nothing changes for you. If you'd still like a person to look at it, you can ask for a review.",
+    "sent": "The crepuscular cityscape exudes an ineffable melancholy as the last v… (664 characters)"
+  },
+  {
+    "status": 200,
+    "elapsed_s": 0.048,
+    "content_id": "dee0d4ef-695c-45d6-b62d-769794d43e90",
+    "guess": "unsure",
+    "confidence": 0.5312,
+    "model_score": 0.3112,
+    "style_score": 0.7053,
+    "combined_score": 0.4688,
+    "label": "We couldn't tell from this piece how it was written, so we're not making a call. A lot of writing by real people lands here, especially very plain or very formal writing. Nothing has been flagged and nothing changes for you. If you'd still like a person to look at it, you can ask for a review.",
+    "sent": "Remote work has changed a lot about how teams operate, honestly more t… (509 characters)"
+  }
+]
+```
+
+**Criterion 4**: an appeal against a real AI decision, and one against a one-character typo of a real id (entries 1 and 11 of 13).
+
+```json
+[
+  {
+    "sent": "submit as eval_appeal_1, then appeal its content_id",
+    "submit_status": 200,
+    "submit_guess": "ai",
+    "content_id": "da10c95b-07d5-4a42-86e2-740d00769929",
+    "status": 200,
+    "response_status": "under_review",
+    "appeal_entries": 1,
+    "reasoning_word_for_word": true,
+    "creator_copied": true,
+    "decision_unchanged": true,
+    "appeal_entry": {
+      "combined_score": 0.7523,
+      "content_id": "da10c95b-07d5-4a42-86e2-740d00769929",
+      "creator_id": "eval_appeal_1",
+      "decided_at": "2026-11-08T20:55:32+00:00",
+      "event": "appeal",
+      "guess": "ai",
+      "label": "This looks like it was probably written with an AI tool. That's our best guess, not a finding about you, and it can be wrong. If you wrote this yourself, ask for a review and a person will look at it.",
+      "model_score": 0.7205,
+      "reasoning": "I wrote every word of this myself — it's from my notebook, the part about my grandmother's café. I'd like a person to read it again, please.",
+      "status": "under_review",
+      "style_score": 0.8,
+      "timestamp": "2026-11-08T20:55:32+00:00"
+    }
+  },
+  {
+    "sent": "appeal against made-up content_id da10c95b-07d5-4a42-86e2-740d00769920",
+    "status": 404,
+    "error": "unknown_content_id",
+    "message": "We couldn't find a submission with id da10c95b-07d5-4a42-86e2-740d00769920. Check it matches the one you were given.",
+    "appeal_entries": 0
+  }
+]
+```
+
+**Criterion 5**: the 250,000-character body, the JSON list, and the /ping afterwards (entries 6–8 of 8).
+
+```json
+[
+  {
+    "status": 413,
+    "elapsed_s": 0.001,
+    "error": "text_too_long",
+    "message": "That's 250,000 characters. The limit is 20,000.",
+    "sent": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx… (250,000 characters)",
+    "log_entry": {
+      "combined_score": null,
+      "content_id": null,
+      "creator_id": "eval_bad_huge",
+      "event": "rejected",
+      "guess": null,
+      "http_status": 413,
+      "label": null,
+      "model_score": null,
+      "reason": "text_too_long",
+      "route": "/submit",
+      "status": "rejected",
+      "style_score": null,
+      "text_length": 250000,
+      "timestamp": "2026-11-08T20:55:34+00:00"
+    },
+    "log_matches": true
+  },
+  {
+    "status": 400,
+    "elapsed_s": 0.001,
+    "error": "invalid_json",
+    "message": "Send a JSON object like {\"text\": \"...\", \"creator_id\": \"...\"}.",
+    "sent": "[\"text\", \"creator_id\"]",
+    "log_entry": {
+      "combined_score": null,
+      "content_id": null,
+      "creator_id": "unknown",
+      "event": "rejected",
+      "guess": null,
+      "http_status": 400,
+      "label": null,
+      "model_score": null,
+      "reason": "invalid_json",
+      "route": "/submit",
+      "status": "rejected",
+      "style_score": null,
+      "timestamp": "2026-11-08T20:55:34+00:00"
+    },
+    "log_matches": true
+  },
+  {
+    "status": 200,
+    "elapsed_s": 0.001,
+    "ok": true,
+    "sent": "POST /ping, after the trial"
+  }
+]
 ```
 
 **Diagnoses**
