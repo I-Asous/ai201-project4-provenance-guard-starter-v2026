@@ -89,6 +89,22 @@ service that only ever says "unsure" is useless. Two signals disagreeing is
 exactly the uncertainty the unsure label exists for, so calling a split case AI
 would be accusing someone on half the evidence.
 
+> **Revised in unit 8:** The 3 borderline inputs are fixed before the run: AI
+> text lightly edited by hand, formal human prose, and AI text written in
+> ornate vocabulary. **At least 2 of those 3 are labelled unsure in every
+> trial.** Separately, **no input in the run whose `model_score` and
+> `style_score` differ by 0.4 or more is ever labelled high-confidence AI.**
+>
+> **Why revised:** As written, an input counted as borderline if its two scores
+> *turned out* to differ by 0.4 or more. That meant I couldn't say which three
+> inputs the "2 of 3" applied to until after the run, and in this run they
+> didn't line up. Hazlitt's essay, picked as clearly human, split by 0.58, so
+> it met the borderline definition. The ornate AI text, picked as borderline
+> because a similar paragraph split in Milestone 4, split by only 0.36, so it
+> didn't. I couldn't reach a verdict without first deciding which inputs
+> counted, after seeing their scores. The target is unchanged (2 of 3); only
+> the sample is now fixed in advance.
+
 ---
 
 ## 4. Every appeal changes status and is recorded

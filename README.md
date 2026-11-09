@@ -452,19 +452,130 @@ All ten 429s are in `logs/audit.jsonl` as `rejected` entries with `"reason": "ra
 <!-- Every attack with its outcome and a held-or-broke mark.
      `run_attacks.py --label before` produces the table. -->
 
+Produced by `python run_attacks.py --set attack_set --label before`, against the service on port 5055. Raw output: [results/attack_run_2026-11-08_1530_before.md](results/attack_run_2026-11-08_1530_before.md). The runner only marks crashes, and there were none (no 5xx in 56), so every verdict below is mine.
 
+**How I called held or broke.** An attack held if the service did what it should with that input:
+
+- **evasion** (AI text in disguise) held only if it was labelled AI. Unsure counts as broke, because "unsure" flags nothing, so the disguise worked.
+- **false_positive** (real human writing that looks machine-made) held unless it was labelled AI. Unsure and a refusal both hold, because nobody was accused.
+- **prompt_injection** held if the injected text didn't get what it aimed at: a human label for AI text, a changed label, or a corrupted log line.
+- **malformed** and **flood** held if refused with an accurate 4xx and logged. A crash, or a refusal that gives a false reason, broke.
+
+`Combined` is the score the thresholds apply to (human below 0.45, AI from 0.75), read from each attack's log line. For a refused request, `Result` is the error code from the log.
+
+| ID | Family | Targeting | Status | Result | Combined | Verdict | Why |
+|---|---|---|---|---|---|---|---|
+| EV01 | evasion | signal two: typos raise word variety | 200 | human | 0.331 | **BROKE** | typos sent signal one from 0.41 to 0.02 |
+| EV02 | evasion | signal two: broken-up sentences raise length spread | 200 | human | 0.201 | **BROKE** | sentence fragments sent signal two from 0.80 to 0.06 |
+| EV03 | evasion | signal two: a pasted quotation changes the shape | 200 | human | 0.369 | **BROKE** | the quotation sent signal two from 0.80 to 0.32 |
+| EV04 | evasion | signal one: unusual words raise perplexity | 200 | unsure | 0.511 | **BROKE** | unsure, not AI: rare words sent signal one from 0.41 to 0.32 |
+| EV05 | evasion | both signals: heavy human editing pass | 200 | human | 0.136 | **BROKE** | rewritten so heavily both signals read human |
+| EV06 | evasion | signal two: one very long sentence and one very short | 200 | human | 0.286 | **BROKE** | uneven sentences sent signal two from 0.80 to 0.32 |
+| EV07 | evasion | signal two: padding with punctuation | 200 | human | 0.279 | **BROKE** | extra punctuation sent signal two from 0.80 to 0.27 |
+| EV08 | evasion | signal one: text below the token window | 400 | `text_too_short` | — | **HELD** | refused: under 20 words, never scored |
+| EV09 | evasion | both: AI text with a human opening paragraph bolted on | 200 | unsure | 0.494 | **BROKE** | unsure, not AI: the human opening lowered signal two |
+| EV10 | evasion | signal two: repeated stanza structure | 200 | ai | 0.922 | **HELD** | labelled AI |
+| FP01 | false_positive | plain, clear human writing with no flourishes | 200 | human | 0.443 | **HELD** | labelled human |
+| FP02 | false_positive | human writing in a formal register | 200 | unsure | 0.649 | **HELD** | unsure, so nobody accused |
+| FP03 | false_positive | a non-native English speaker writing carefully | 200 | unsure | 0.707 | **HELD** | unsure, so nobody accused |
+| FP04 | false_positive | a student essay written to a rubric | 200 | unsure | 0.628 | **HELD** | unsure, so nobody accused |
+| FP05 | false_positive | technical documentation written by a person | 200 | unsure | 0.713 | **HELD** | unsure, but only 0.04 below the AI line |
+| FP06 | false_positive | a person imitating a formal template | 200 | unsure | 0.732 | **HELD** | unsure, but only 0.02 below the AI line |
+| FP07 | false_positive | human writing that repeats a phrase deliberately | 200 | unsure | 0.705 | **HELD** | unsure, so nobody accused |
+| FP08 | false_positive | very short genuine human submission | 400 | `text_too_short` | — | **HELD** | refused (8 words), so nobody accused |
+| PI01 | prompt_injection | instruction to ignore the check | 200 | human | 0.212 | **BROKE** | AI text labelled human: the instruction's odd wording raised perplexity |
+| PI02 | prompt_injection | instruction disguised as a system message | 200 | human | 0.077 | **BROKE** | AI text labelled human: the instruction's odd wording raised perplexity |
+| PI03 | prompt_injection | instruction wrapped in the writer's voice | 200 | human | 0.330 | **BROKE** | AI text labelled human: the instruction's odd wording raised perplexity |
+| PI04 | prompt_injection | attempt to make the label text hostile | 200 | human | 0.241 | **HELD** | label is fixed text; real human text labelled human |
+| PI05 | prompt_injection | attempt to inject into the audit log | 200 | human | 0.317 | **HELD** | text is never logged; the log line is intact |
+| PI06 | prompt_injection | instruction plus real human text | 200 | human | 0.399 | **HELD** | real human text labelled human |
+| MF01 | malformed | text is only whitespace | 400 | `missing_text` | — | **HELD** | refused cleanly |
+| MF02 | malformed | text is a single character | 400 | `text_too_short` | — | **HELD** | refused cleanly |
+| MF03 | malformed | text is control characters | 400 | `text_too_short` | — | **HELD** | refused cleanly |
+| MF04 | malformed | text is only punctuation | 400 | `text_too_short` | — | **HELD** | refused cleanly |
+| MF05 | malformed | text is a very long single word | 400 | `text_too_short` | — | **HELD** | refused cleanly |
+| MF06 | malformed | text is emoji only | 400 | `text_too_short` | — | **HELD** | refused cleanly |
+| MF07 | malformed | text is right-to-left script | 400 | `text_too_short` | — | **BROKE** | Arabic counted as 0 words, so refused with a false reason |
+| MF08 | malformed | text is 60,000 characters | 413 | `text_too_long` | — | **HELD** | refused cleanly |
+| RQ01 | malformed | no text field at all | 400 | `missing_text` | — | **HELD** | refused cleanly |
+| RQ02 | malformed | no creator_id | 400 | `missing_creator_id` | — | **HELD** | refused cleanly |
+| RQ03 | malformed | text is a number | 400 | `missing_text` | — | **HELD** | refused cleanly |
+| RQ04 | malformed | text is a list | 400 | `missing_text` | — | **HELD** | refused cleanly |
+| RQ05 | malformed | text is null | 400 | `missing_text` | — | **HELD** | refused cleanly |
+| RQ06 | malformed | creator_id is an object | 400 | `missing_creator_id` | — | **HELD** | refused cleanly |
+| RQ07 | malformed | body is a JSON array, not an object | 400 | `invalid_json` | — | **HELD** | refused cleanly |
+| RQ08 | malformed | body is unparseable JSON | 400 | `invalid_json` | — | **HELD** | refused cleanly |
+| RQ09 | malformed | body is empty | 400 | `invalid_json` | — | **HELD** | refused cleanly |
+| RQ10 | malformed | body is form-encoded, not JSON | 429 | `rate_limited` | — | **HELD** | 429 from the shared per-address count; sent alone it's 400 invalid_json |
+| RQ11 | malformed | body is JSON claiming to be plain text | 429 | `rate_limited` | — | **HELD** | 429 from the shared per-address count; sent alone it's 400 invalid_json |
+| RQ12 | malformed | deeply nested JSON | 400 | `missing_text` | — | **HELD** | refused cleanly |
+| FL01_01 | flood_same_creator | 20 rapid submissions from one creator | 400 | `text_too_short` | — | **HELD** | refused (9 words), and counted toward the limit |
+| FL01_02 | flood_same_creator | 20 rapid submissions from one creator | 400 | `text_too_short` | — | **HELD** | refused (9 words), and counted toward the limit |
+| FL01_03 | flood_same_creator | 20 rapid submissions from one creator | 400 | `text_too_short` | — | **HELD** | refused (9 words), and counted toward the limit |
+| FL01_04 | flood_same_creator | 20 rapid submissions from one creator | 400 | `text_too_short` | — | **HELD** | refused (9 words), and counted toward the limit |
+| FL01_05 | flood_same_creator | 20 rapid submissions from one creator | 400 | `text_too_short` | — | **HELD** | refused (9 words), and counted toward the limit |
+| FL01_06 | flood_same_creator | 20 rapid submissions from one creator | 429 | `rate_limited` | — | **HELD** | rate limited |
+| FL01_07 | flood_same_creator | 20 rapid submissions from one creator | 429 | `rate_limited` | — | **HELD** | rate limited |
+| FL01_08 | flood_same_creator | 20 rapid submissions from one creator | 429 | `rate_limited` | — | **HELD** | rate limited |
+| FL01_09 | flood_same_creator | 20 rapid submissions from one creator | 429 | `rate_limited` | — | **HELD** | rate limited |
+| FL01_10 | flood_same_creator | 20 rapid submissions from one creator | 429 | `rate_limited` | — | **HELD** | rate limited |
+| FL01_11 | flood_same_creator | 20 rapid submissions from one creator | 429 | `rate_limited` | — | **HELD** | rate limited |
+| FL01_12 | flood_same_creator | 20 rapid submissions from one creator | 429 | `rate_limited` | — | **HELD** | rate limited |
+
+| Family | Attacks | Held | Broke |
+|---|---|---|---|
+| `evasion` | 10 | 2 | 8 |
+| `false_positive` | 8 | 8 | 0 |
+| `prompt_injection` | 6 | 3 | 3 |
+| `malformed` | 20 | 19 | 1 |
+| `flood_same_creator` | 12 | 12 | 0 |
+| **all** | **56** | **44** | **12** |
+
+**12 of 56 broke:** 8 evasion, 3 prompt injection and 1 malformed. Nothing crashed, no real writer was labelled AI, and the rate limit held. Eleven of the twelve are AI text that wasn't flagged; the twelfth is a writer refused for a false reason. The diagnoses are under Run Log and Verdicts.
+
+Two follow-ups beyond the table:
+
+- **RQ10 and RQ11 were stopped by the rate limiter before the route saw them.** Neither body has a `creator_id` the limiter can read, so both counted against the shared address, which five earlier malformed requests had already used up. Sent again on their own, both get a `400 invalid_json` ([recheck RQ10](results/attack_run_2026-11-08_2135_recheck_RQ10.md), [recheck RQ11](results/attack_run_2026-11-08_2135_recheck_RQ11.md)). They held either way, but the first answer, "Too many submissions", was the wrong reason.
+- **The flood's first five requests were refused as too short** (9 words), and they still counted toward the limit, so the 429 arrived on the sixth. The Milestone 1 flood, using text long enough to score, showed the same cut-off: 200 ×5, then 429.
 
 **Ten audit log entries from the run**
 
 <!-- Choose entries that show the interesting failures, not the ten easiest. -->
 
-```json
+These are verbatim lines from `logs/audit.jsonl`, in this order:
 
+1. EV01: AI text labelled human through signal one
+2. PI02: AI text labelled human through signal one
+3. EV02: AI text labelled human through signal two
+4. EV10: the one evasion caught
+5. FP06: a real writer close to an accusation
+6. FP05: a real writer close to an accusation
+7. MF07: Arabic refused as "0 words"
+8. RQ10: a malformed body rate-limited by the shared address count
+9. FL01_06: the flood's first 429
+10. PI05: a log-injection attempt that left the line intact
+
+```json
+{"timestamp": "2026-11-08T20:30:52+00:00", "content_id": "5ca18720-d84c-4e66-98b4-f77fecdd8fbd", "creator_id": "attacker_EV01", "guess": "human", "model_score": 0.0176, "style_score": 0.8, "combined_score": 0.3306, "label": "This reads like it was written by a person. Nothing in it looked machine-generated to us.", "status": "decided"}
+{"timestamp": "2026-11-08T20:30:52+00:00", "content_id": "ca098b3b-b290-4b1e-b154-1070ffff77c4", "creator_id": "attacker_PI02", "guess": "human", "model_score": 0.0268, "style_score": 0.1524, "combined_score": 0.077, "label": "This reads like it was written by a person. Nothing in it looked machine-generated to us.", "status": "decided"}
+{"timestamp": "2026-11-08T20:30:52+00:00", "content_id": "c460145b-5df6-49dc-bfc8-0b88ad4ac3c7", "creator_id": "attacker_EV02", "guess": "human", "model_score": 0.2946, "style_score": 0.0603, "combined_score": 0.2009, "label": "This reads like it was written by a person. Nothing in it looked machine-generated to us.", "status": "decided"}
+{"timestamp": "2026-11-08T20:30:52+00:00", "content_id": "789489e8-a4cc-435e-b4fa-6edd00a45f51", "creator_id": "attacker_EV10", "guess": "ai", "model_score": 0.9895, "style_score": 0.8201, "combined_score": 0.9217, "label": "This looks like it was probably written with an AI tool. That's our best guess, not a finding about you, and it can be wrong. If you wrote this yourself, ask for a review and a person will look at it.", "status": "decided"}
+{"timestamp": "2026-11-08T20:30:52+00:00", "content_id": "64a7b27a-8799-489c-8d26-2c3c9844bd96", "creator_id": "attacker_FP06", "guess": "unsure", "model_score": 0.8409, "style_score": 0.5685, "combined_score": 0.7319, "label": "We couldn't tell from this piece how it was written, so we're not making a call. A lot of writing by real people lands here, especially very plain or very formal writing. Nothing has been flagged and nothing changes for you. If you'd still like a person to look at it, you can ask for a review.", "status": "decided"}
+{"timestamp": "2026-11-08T20:30:52+00:00", "content_id": "5c8e3488-ade2-436d-a470-f500b52bc6c6", "creator_id": "attacker_FP05", "guess": "unsure", "model_score": 0.6686, "style_score": 0.7798, "combined_score": 0.7131, "label": "We couldn't tell from this piece how it was written, so we're not making a call. A lot of writing by real people lands here, especially very plain or very formal writing. Nothing has been flagged and nothing changes for you. If you'd still like a person to look at it, you can ask for a review.", "status": "decided"}
+{"timestamp": "2026-11-08T20:30:53+00:00", "content_id": null, "creator_id": "attacker_MF07", "guess": null, "model_score": null, "style_score": null, "combined_score": null, "label": null, "status": "rejected", "event": "rejected", "reason": "text_too_short", "http_status": 400, "route": "/submit", "text_length": 105}
+{"timestamp": "2026-11-08T20:30:53+00:00", "content_id": null, "creator_id": "unknown", "guess": null, "model_score": null, "style_score": null, "combined_score": null, "label": null, "status": "rejected", "event": "rejected", "reason": "rate_limited", "http_status": 429, "route": "/submit", "limit": "5 per 1 minute", "counted_as": "127.0.0.1"}
+{"timestamp": "2026-11-08T20:30:53+00:00", "content_id": null, "creator_id": "attacker_flood", "guess": null, "model_score": null, "style_score": null, "combined_score": null, "label": null, "status": "rejected", "event": "rejected", "reason": "rate_limited", "http_status": 429, "route": "/submit", "limit": "5 per 1 minute", "counted_as": "attacker_flood"}
+{"timestamp": "2026-11-08T20:30:53+00:00", "content_id": "09841089-0a95-4f77-95ba-9227154f86a3", "creator_id": "attacker_PI05", "guess": "human", "model_score": 0.3614, "style_score": 0.25, "combined_score": 0.3168, "label": "This reads like it was written by a person. Nothing in it looked machine-generated to us.", "status": "decided"}
 ```
 
 **The single worst outcome** — the one I'd least want to explain to a writer
 whose work got caught by it:
 
+**MF07, the Arabic text.** The service told the writer "That's 0 words. We need at least 20 to say anything useful." The text has 17 words, and its length isn't the problem. The route counts words with `stylometry.words()`, which matches only `[a-z0-9']`, so Arabic counts as zero words at any length. A 204-word version still counts as 0 ([results/diagnosis_2026-11-08_2137.md](results/diagnosis_2026-11-08_2137.md), section 4).
+
+Anyone writing in Arabic, Chinese, Russian or any other non-Latin script can never get a decision, and the reason they're given is untrue. The evasion breaks are misses I accepted on purpose in DESIGN.md §3. This one shuts a real writer out and tells them something false about their own writing.
+
+The closest call on an accusation was FP06, a cover letter written to a template, which scored 0.732: 0.018 below the AI line.
 
 
 ---
@@ -481,9 +592,22 @@ Produced by `python run_eval.py --label before`, against the service on port 505
 |---|---|---|---|---|---|
 | 1. My own writing is never called AI *(stand-ins)* | 0 of 10 AI **and** ≥ 5 of 10 human | 0 AI, 8 human | 0 AI, 8 human | 0 AI, 8 human | MET (on stand-ins) |
 | 2. Clearly-AI and clearly-human text score far apart | AI mean ≥ 0.30 above human mean **and** ≥ 4 of 5 AI above the top human | gap 0.43, 4 of 5 | gap 0.43, 4 of 5 | gap 0.43, 4 of 5 | MET |
-| 3. All three labels reachable, borderline lands in unsure | 3 of 3 labels, ≥ 2 of 3 borderline unsure, 0 split inputs labelled AI | 3 of 3, 3 of 3, 0 | 3 of 3, 3 of 3, 0 | 3 of 3, 3 of 3, 0 | MET |
+| 3. All three labels reachable, borderline lands in unsure | 3 of 3 labels, ≥ 2 of 3 borderline unsure, 0 split inputs labelled AI | 3 of 3, 3 of 3, 0 | 3 of 3, 3 of 3, 0 | 3 of 3, 3 of 3, 0 | MET (revised criterion: also MET) |
 | 4. Every appeal changes status and is recorded | 10 of 10 real appeals **and** 3 of 3 made-up ids refused | 10/10, 3/3 | 10/10, 3/3 | 10/10, 3/3 | MET |
 | 5. Bad input is refused cleanly, never crashes | 7 of 7 4xx with error + message, 7 of 7 logged, huge one < 2 s, /ping answers | 7/7, 7/7, 0.001 s, 200 | 7/7, 7/7, 0.001 s, 200 | 7/7, 7/7, 0.001 s, 200 | MET |
+
+**How I called each verdict.** Each target had to hold in all three trials, and every part of a criterion joined by "and" had to hold too.
+
+1. **MET, on stand-ins only.** Both halves held every time: 0 AI (the target is 0) and 8 human (the target is at least 5). The criterion is about pieces *I wrote myself*, and none of these were, so as written it is untested. The verdict covers the stand-ins and nothing more.
+2. **MET.** The gap was 0.43 against a 0.30 target. Exactly 4 of the 5 AI texts scored above the top human text (0.4713) in every trial, which is the minimum. The fifth, at 0.4649, is the one miss the target allows.
+3. **MET as written, and MET as revised.** All three labels appeared in every trial, all three borderline inputs were unsure, and both inputs that split by 0.4 or more were unsure. As written, though, I couldn't fix which inputs counted as "borderline" until after the run. That made it a broken criterion, not a missed one, so I revised it in `criteria.md` (original kept, revision underneath). Under the revision, the three fixed borderline inputs went 3 of 3 unsure.
+4. **MET.** An appeal counted only if all five checks were true at once: a 200 with `under_review`, exactly one appeal entry, the reasoning identical, the creator copied, and the decision unchanged. That held for 10 of 10 real appeals, and 3 of 3 made-up ids were refused, in every trial.
+5. **MET.** In every trial, 7 of 7 got a 4xx with both `error` and `message`, and 7 of 7 had a matching `rejected` log line. The huge body took 0.001 s, and `/ping` returned 200 afterwards.
+
+**Arguing against my own verdicts.** I argued the opposite verdict as hard as I could on the two closest calls, then went looking for evidence that would settle each.
+
+- **Criterion 1 should not count as MET.** The criterion names "pieces I wrote myself", and the run used none. The argument is right, and the table says so. *What would settle it:* ten real pieces, run three times. That evidence isn't in this repo.
+- **Criterion 2 only passed by luck.** 4 of 5 is the minimum, and the fifth AI text sits 0.006 below the top human. If the pass depends on this exact set of AI texts, the margin means nothing. *What would settle it:* a second set of five unedited AI texts against the same five humans. I ran one ([results/diagnosis_2026-11-08_2137.md](results/diagnosis_2026-11-08_2137.md), section 5). The gap was 0.50, and **5 of 5** scored above the top human. The verdict stands. The reading-benefits text in the first set is a hard case, not evidence that the separation is luck.
 
 **What's behind each row**
 
@@ -729,7 +853,55 @@ Produced by `python run_eval.py --label before`, against the service on port 505
 
      Look for a pattern. Five failures on one signal is one problem, not five. -->
 
+The numbers below come from the attack run and from [results/diagnosis_2026-11-08_2137.md](results/diagnosis_2026-11-08_2137.md). That file is produced by `python diagnose.py`, which scores text with the same functions `/submit` calls.
 
+**Criteria: no misses, and my targets were too low.** All five held in all three trials, so no criterion miss needs diagnosing. Here is why that result is weaker than it looks:
+
+- **Criteria 4 and 5 test plumbing I'd already built to pass them.** Criterion 5's 2-second bound was beaten about 2,000 times over.
+- **Criterion 3's last clause can't fail.** `combine_signals` caps any score whose signals differ by 0.4 or more at 0.74, which is below the AI line. The check confirms the code does what it says. It doesn't test whether the design is right.
+- **Criterion 1 ran on stand-ins easier than the people it's meant to protect.** My stand-ins got 8 of 10 human. The attack set's false-positive family got 1 of 7 human and 6 unsure. That family covers plain, formal, non-native, rubric-written, technical, template and deliberately repetitive writing. Run against those seven, the "at least 5 human" half of criterion 1 would have missed.
+- **Nothing measures whether AI text gets caught.** I made the criteria one-sided on purpose, because an accusation costs more than a miss. That left the service's biggest weakness outside every target. Two of my five unedited AI texts weren't labelled AI, and neither was the attack set's AI paragraph before any attack touched it.
+
+**The criterion I'd tighten is 2.** I'd add: *at least 4 of the 5 unedited AI texts are labelled high-confidence AI in every trial.* This run would miss it at 3 of 5. That's the point of adding it: it's the one number that would have shown the evasion failures coming.
+
+**Broken attacks: 12, from three problems.**
+
+**Problem 1: the AI text started in "unsure" before any attack (stage: signal one).** Most evasion and injection attacks are built from one generic AI paragraph about workplace communication; EV09's second paragraph is that paragraph, untouched.
+
+- **Scored on its own, the paragraph lands in unsure.** Its perplexity is 29.0. Signal one maps perplexity to a score with its midpoint at 25 (`detector.model_signal`), so 29.0 gives **0.41**, on the human side. Combined with style 0.80, that's **0.5655, unsure**.
+- **The midpoint is mine.** I moved it from 45 to 25 in Milestone 4 so that human essays would stop scoring as AI. My calibration AI texts sat at perplexity 7–14; this paragraph sits at 29.
+- **The same thing caught criterion 2.** Its reading-benefits AI text (perplexity 23.4, model 0.54) landed unsure the same way.
+- **So the attacks only needed a small push.** None had to carry AI text from "AI" to "human"; each only had to move it from 0.57 to below 0.45.
+
+**Problem 2: one fooled signal is enough (stage: the combining rule).** The combined score is 0.6 × model + 0.4 × style, and the disagreement cap only ever pulls a score down. That has two consequences:
+
+- **A near-zero model score guarantees "human".** The combined score can be at most 0.40, below the 0.45 line, whatever signal two says.
+- **A near-zero style score rules out "AI".** The combined score can be at most 0.60, below the 0.75 line.
+
+Neither signal can hold a score up when the other is fooled. Each attack below fooled one signal and got through.
+
+*Through signal one: rare tokens raise perplexity.* (EV01, EV04, EV05, PI01–PI03)
+
+- **EV01 (typos).** Perplexity went from 29.0 to 124.8, and the model score from 0.41 to **0.02**. Misspellings like "poistioned" and "thsi" split into rare word pieces gpt2 can't predict. Signal two didn't move at all (0.80 before and after). The attack set aimed this one at signal two, but in my service the stage is signal one. Combined 0.33, human.
+- **PI01–PI03 (injected instructions).** Nothing in the service reads instructions, so none were obeyed. The instructions worked as *unusual text*. PI02's "SYSTEM: …" line raised perplexity from 22.3 (the AI part alone) to 105.2, and the model score fell from 0.57 to 0.03. With the instruction cut off, all three AI fragments score unsure (0.46–0.59); with it, they score human (0.08–0.33). That makes this the same mechanism as the typos.
+- **EV04 (rare words like "desiderata").** Perplexity went from 29.0 to 33.9 and the model score from 0.41 to 0.32. It was a smaller push and stopped at unsure (0.51).
+- **EV05 (heavy human edit).** Model 0.07, style 0.24, combined 0.14. After an edit that heavy, a person has largely rewritten the text. This is the one break I'd accept.
+
+*Through signal two: sentence shape.* (EV02, EV03, EV06, EV07, EV09)
+
+Signal two measures sentence-length spread, word variety and expressive punctuation. The paragraph's even, mid-length sentences score 0.80. Each of these edits raises spread or punctuation without changing a word of the argument:
+
+- EV02, sentences broken into fragments: 0.06
+- EV06, one very long sentence next to a very short one: 0.32
+- EV03, a pasted quotation: 0.32
+- EV07, sprinkled dashes and brackets: 0.27
+- EV09, a human opening paragraph: 0.53
+
+Signal one was already at 0.27–0.47 on these, and problem 2 did the rest: four labelled human, and EV09 unsure.
+
+**Problem 3: MF07 (stage: the route).** `/submit` counts words with `stylometry.words()`, which matches only `[a-z0-9']`. Arabic, or any other non-Latin script, counts as zero words, so the route refuses it as `text_too_short` and says "That's 0 words". A 204-word Arabic text still counts as 0. The same regex also splits accented words ("café" becomes "caf"), which changes the word-variety measure for French or Spanish writing.
+
+**The pattern.** Problems 1 and 2 account for 11 of the 12 breaks, and they're the same design choice seen from two sides. I tuned the service so that every error falls toward "human", which is DESIGN.md §3's trade: a miss rather than an accusation. The attack run shows how little push it takes to get there: one fooled signal, starting from a paragraph that was already in unsure. The false-positive family shows the other side of that trade. No real writer was accused, but four of them sat within 0.05 of the AI line, so the margin protecting them is thin as well.
 
 ---
 
