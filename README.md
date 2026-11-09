@@ -419,6 +419,28 @@ Refused input leaves a trace too. Here's a 250,000-character body, answered with
   With the original numbers, the person in my false-positive trace would have been labelled AI.
 - *What I changed:* I kept the code, weights and thresholds as they came back. What I controlled was the process. I ran the milestones one at a time and had each one checked against its own "before you move on" list. I also declined to let Claude push to GitHub and pushed myself. I'm knowingly accepting two of its trades: lightly edited AI gets labelled human, and the calibration "human" texts are stand-ins. Unit 8's run against my own writing (criterion 1) is where I'll find out whether accepting them was right.
 
+**Moment 3 (unit 8, Milestones 2–3)**
+
+- *What I asked for:* I copied the attack set into the repo and had Claude Code run it, then pasted in the Milestone 3 brief. When it asked for ten pieces of my own writing for criterion 1, I told it to use stand-ins so the repo would be complete.
+- *What came back:*
+  - **[run_eval.py](run_eval.py), extended** to record `combined_score`, `error`, `message` and timing. It now runs criterion 4's appeals end to end (`appeal_trial`) and checks the log and `/ping` for criterion 5.
+  - **[scenarios.py](scenarios.py), filled in:** Claude's own unedited AI paragraphs; public-domain essays from Project Gutenberg, checked character for character against the source; and ten pieces labelled as stand-ins.
+  - **A test run first, against a scratch copy of the service on another port,** so the real audit log stayed clean.
+  - **A flag on its own work:** the edit in the "lightly edited AI" input was its own, not a hand edit.
+- *What I changed:* nothing in the text. The stand-ins were my decision, and they cost criterion 1: its MET says nothing about my writing. Moment 2 said this run is where I'd find out whether accepting stand-ins was right. I still haven't found out.
+
+**Moment 4 (unit 8, Milestones 4–5)**
+
+- *What I asked for:* the Milestone 4 and 5 briefs, pasted in.
+- *What came back:*
+  - **A written held/broke rule before any attack was marked**; for evasion, unsure counts as broke.
+  - **Measurements instead of guesses.** Claude scored the attack set's AI paragraph with no attack and found it already lands in unsure. It cut the injected instructions off the prompt-injection attacks and showed they worked as unusual text, not as instructions. And it found the ASCII-only word counter.
+  - **[diagnose.py](diagnose.py),** which reproduces every number in the Diagnoses.
+  - **A challenge to its own criterion 2 verdict,** as the brief suggests. It ran a second set of AI texts to settle the question, and the verdict held.
+  - **For Milestone 5, the obvious fix tested before the real one.** Counting words in any alphabet would have scored human Arabic at 0.738, so it made the script check instead.
+  - **A bad run caught.** Its first "after" criteria run had hit the shared rate limit, so it re-ran with nothing changed and kept the bad run as evidence.
+- *What I changed:* nothing in the text. I kept the verdict rule, the criterion 3 revision and the one-change fix as they came back. Claude committed each milestone but didn't push; pushing and submitting the URL are up to me.
+
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
 ---
@@ -1060,13 +1082,35 @@ Here's how I know it didn't do more or less than intended:
 <!-- For each attack still getting through and each criterion still missed:
      what you'd do, and why you stopped. -->
 
+**Still getting through: 11 attacks, all AI text that isn't flagged.** None crashes the service and none accuses anyone. They're problems 1 and 2 from the Diagnoses, so I've grouped them by the signal they get past.
 
+| Attacks | What I'd do | Why I stopped |
+|---|---|---|
+| **EV01, EV04, PI01, PI02, PI03.** Rare tokens (typos, odd words, an injected instruction) send signal one toward human. | Score signal one on the *median* token surprise, or drop the most surprising tenth of tokens before averaging, so a few misspelled words or one strange sentence can't move the whole text. As well as that, let a strongly AI-leaning signal block a "human" label, mirroring the cap I already have: EV01's style signal still said 0.80. | Changing how signal one averages changes every model score, human ones included, so the midpoint would need recalibrating against the false-positive family before it was safe. That's two changes, and Milestone 5 allowed one. Even done perfectly, it only returns these texts to where the unattacked paragraph starts: 0.57, unsure, which my rule still counts as broke. |
+| **EV02, EV03, EV06, EV07, EV09.** Sentence-shape edits send signal two toward human. | Fix signal one first (next row). On these texts signal one only said 0.27–0.47 to begin with, so signal two is finishing a miss, not causing one. Signal two's measures are cheap to fake by design (Signals and Scoring names that blind spot), so I wouldn't give it more say until signal one is reliable. | Hardening signal two against shape edits means new measures and a new calibration, and it still wouldn't flip these to AI while signal one reads the paragraph as human-leaning. |
+| **All ten above.** The attack set's AI paragraph scores unsure before any attack (perplexity 29 against a midpoint of 25). | Use a stronger detector than gpt2 (`AI201_DETECTOR_MODEL` in `config.py` already allows it), calibrated on a real set of AI and human text that includes the false-positive family rather than four calibration paragraphs. | That's a new signal one and a redo of everything Milestone 4 tuned. And any setting that catches this paragraph lifts the four real writers already at 0.70–0.73 toward the AI line. That's the trade below. |
+| **EV05.** A heavy human editing pass. | Nothing. | After an edit that heavy, a person has rewritten the text, so calling it human is defensible. |
+
+**Criteria still missed: none. One is untested as written.**
+
+- **Criterion 1 ran on stand-ins.** What I'd do: put ten real pieces in `scenarios.MY_WRITING`, at least three of them plain, and run `python run_eval.py` again; nothing else needs to change. Why I stopped: no real writing was supplied for this submission. The stand-ins are labelled as stand-ins in `scenarios.py`, in the Run Log, and here.
+- **Criterion 2, tightened the way the Diagnoses propose** (at least 4 of 5 unedited AI texts labelled AI), would miss at 3 of 5. That's problem 1 again, with the same fix and the same reason for stopping.
+
+**Also still wrong, though no attack verdict counts it:**
+
+- **Requests without a readable `creator_id` share one per-address limit.** RQ10 and RQ11 got "Too many submissions" on their first try, and so did my own criterion 5 list body when I ran the criteria straight after the attack run. *What I'd do:* count refusals in their own bucket, so one caller's malformed requests can't use up the address's allowance for submissions that would score. *Why I stopped:* it gives the wrong error but doesn't open a hole, and the limits were Milestone 1's decision.
+- **`stylometry.words()` splits accented words** ("café" becomes "caf", "naïve" becomes "na" + "ve"), which skews signal two for French, Spanish or anyone's name with an accent. *What I'd do:* make it Unicode-aware, then recalibrate signal two's anchors. *Why I stopped:* it moves signal two on every text with an accent or a curly apostrophe, so it needs its own before-and-after run.
+- **French or Spanish in the Latin alphabet still goes to an English model.** Milestone 5's check catches other alphabets, not other languages. *What I'd do:* detect the language as well as the script. *Why I stopped:* the same honest-refusal approach would work, but it needs a language detector, and none is in the pinned stack.
+- **Five different input mistakes share one error code.** Nothing, whitespace, `null`, a number and a missing field all get `missing_text`. *What I'd do:* split out `text_not_a_string`. *Why I stopped:* the message is still accurate for all five, so it's low priority.
 
 **The trade I'd make if this ran for real:**
 
 <!-- Two sentences. Fewer wrong accusations means more AI text getting through.
      Say which way you'd go and WHO PAYS FOR IT. -->
 
+I'd go further toward fewer wrong accusations, moving the AI line from 0.75 to the 0.80 that DESIGN.md first proposed. That gives the real writer closest to an accusation 0.068 of room instead of 0.018, and I'd accept that unedited AI labelled AI drops from 7 of 10 to 3 of 10 across my two AI sets. The people who pay are honest writers whose classmates' AI text goes unflagged, and the teachers or editors relying on the label, who'd get "unsure" far more often and have to make the call themselves.
+
+At 0.80, criterion 3 would also miss, since none of its three AI texts reaches 0.80. That's the price in my own terms.
 
 
 <!-- ═════════════════════════════════════════════════════════════════════
