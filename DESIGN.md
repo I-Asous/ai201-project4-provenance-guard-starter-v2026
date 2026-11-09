@@ -203,6 +203,7 @@ Example:
 | 400 | `invalid_json` | body missing, not JSON, or not a JSON object |
 | 400 | `missing_text` | `text` absent, not a string, or empty/whitespace |
 | 400 | `missing_creator_id` | `creator_id` absent, not a string, or empty |
+| 400 | `unsupported_script` | fewer than half the letters are Latin, so neither signal can read it (added in unit 8, Milestone 5) |
 | 400 | `text_too_short` | fewer than 20 words |
 | 413 | `text_too_long` | more than 20,000 characters |
 | 429 | `rate_limited` | over the rate limit (unit 8; handler already in `app.py`) |

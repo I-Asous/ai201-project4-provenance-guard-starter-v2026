@@ -24,6 +24,7 @@ Routes:
     GET  /health      is the service up, and is the model loaded
 """
 
+import unicodedata
 import uuid
 
 from flask import Flask, jsonify, request
@@ -173,8 +174,8 @@ def submit():
 
     Bad input never reaches the model. It gets a 4xx with
     {"error": <code>, "message": <sentence>} and a `rejected` log entry:
-    400 invalid_json / missing_text / missing_creator_id / text_too_short,
-    413 text_too_long, 503 detector_unavailable.
+    400 invalid_json / missing_text / missing_creator_id / unsupported_script /
+    text_too_short, 413 text_too_long, 503 detector_unavailable.
     """
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
@@ -196,6 +197,16 @@ def submit():
     if creator_for_log == "unknown":
         return _reject(creator_for_log, 400, "missing_creator_id",
                        "Include who wrote this, as a non-empty string in \"creator_id\".")
+    # Before the word count, which only sees a–z: text mostly in another
+    # alphabet would be refused as "0 words", which isn't true. Scoring it isn't
+    # an option either, because neither signal can read it (see latin_share).
+    share = latin_share(text)
+    if share is not None and share < MIN_LATIN_SHARE:
+        return _reject(creator_for_log, 400, "unsupported_script",
+                       "This checker only reads English, and most of this piece is in "
+                       "another alphabet, so we haven't scored it. That says nothing "
+                       "about how it was written.",
+                       text_length=len(text), latin_share=round(share, 2))
     n_words = len(stylometry.words(text))
     if n_words < MIN_TEXT_WORDS:
         return _reject(creator_for_log, 400, "text_too_short",
@@ -241,6 +252,27 @@ def submit():
 # (400 tokens) and keeps an enormous body from tying up the service.
 MIN_TEXT_WORDS = 20
 MAX_TEXT_CHARS = 20_000
+
+# Unit 8 Milestone 5. Below this share of Latin letters, the text is refused as
+# unsupported_script. Neither signal can read other alphabets:
+#   - stylometry.words() matches only a–z, so Arabic counts as 0 words, and the
+#     style signal falls back to a neutral 0.5;
+#   - gpt2 was trained on English, and its byte-level tokens make Arabic look
+#     predictable: a short human-written Arabic paragraph scored model 0.90,
+#     combined 0.738, which is 0.012 from an AI label.
+# Half is the line so an English piece quoting another language still scores.
+MIN_LATIN_SHARE = 0.5
+
+
+def latin_share(text):
+    """Share of the text's letters that are Latin (a–z, with or without
+    accents). None when there are no letters at all, e.g. emoji or digits,
+    which the word count already refuses with an accurate reason."""
+    letters = [c for c in text if c.isalpha()]
+    if not letters:
+        return None
+    latin = sum(1 for c in letters if unicodedata.name(c, "").startswith("LATIN"))
+    return latin / len(letters)
 
 
 def _reject(creator_id, status_code, error, message, **extra):

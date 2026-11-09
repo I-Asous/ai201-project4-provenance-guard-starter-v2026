@@ -573,7 +573,7 @@ whose work got caught by it:
 
 **MF07, the Arabic text.** The service told the writer "That's 0 words. We need at least 20 to say anything useful." The text has 17 words, and its length isn't the problem. The route counts words with `stylometry.words()`, which matches only `[a-z0-9']`, so Arabic counts as zero words at any length. A 204-word version still counts as 0 ([results/diagnosis_2026-11-08_2137.md](results/diagnosis_2026-11-08_2137.md), section 4).
 
-Anyone writing in Arabic, Chinese, Russian or any other non-Latin script can never get a decision, and the reason they're given is untrue. The evasion breaks are misses I accepted on purpose in DESIGN.md §3. This one shuts a real writer out and tells them something false about their own writing.
+Anyone writing in Arabic, Chinese, Russian or any other non-Latin script can never get a decision, and the reason they're given is untrue. The evasion breaks are misses I accepted on purpose in DESIGN.md §3. This one shuts a real writer out and tells them something false about their own writing. Milestone 5 fixes it; see The Improvement.
 
 The closest call on an accusation was FP06, a cover letter written to a template, which scored 0.732: 0.018 below the AI line.
 
@@ -907,23 +907,152 @@ Signal one was already at 0.27–0.47 on these, and problem 2 did the rest: four
 
 ## The Improvement
 
-**What I changed:**
+**What I changed:** one input check in the route. Before counting words, `/submit` now works out what share of the text's letters are Latin: a–z with or without accents, read from each character's Unicode name. Below half, the text is refused with a new error, `400 unsupported_script`, and the rejection is logged with its `latin_share`. The check is `latin_share` and `MIN_LATIN_SHARE = 0.5` in `app.py`, called from `app.py::submit`, and DESIGN.md §4's error table has the new row. Weights, thresholds and both signals are unchanged.
 
-**Which diagnosis pointed at it:**
+```json
+{
+  "error": "unsupported_script",
+  "message": "This checker only reads English, and most of this piece is in another alphabet, so we haven't scored it. That says nothing about how it was written."
+}
+```
+
+```json
+{"timestamp": "2026-11-09T02:55:34+00:00", "content_id": null, "creator_id": "readme_mf07", "guess": null, "model_score": null, "style_score": null, "combined_score": null, "label": null, "status": "rejected", "event": "rejected", "reason": "unsupported_script", "http_status": 400, "route": "/submit", "text_length": 105, "latin_share": 0.0}
+```
+
+That's MF07's Arabic text, sent once by hand after the change, and the log line it left.
+
+**Which diagnosis pointed at it:** problem 3, which was also the single worst outcome. MF07's Arabic text was refused with "That's 0 words", because the route's word count only matches `[a-z0-9']`.
+
+**Why not the obvious fix.** The obvious fix is to count words in any alphabet. I tested that before making any change, and it would have been worse. A short paragraph of ordinary human Arabic (49 words, about a trip to the market) would then reach both signals, and neither can read it:
+
+- **Signal two** sees no a–z words and falls back to its neutral 0.5.
+- **Signal one** is gpt2, trained on English text. It reads Arabic as byte-level tokens that are easy to predict (perplexity 10.5), so it scores 0.90.
+- **Combined, that's 0.738:** unsure, 0.012 from an AI label.
+
+Counting the words correctly would have turned a false refusal into a near-accusation. Since neither signal can read the text, the honest answer is to say so.
+
+**Why not problems 1 and 2,** which explain 11 of the 12 breaks: no single change fixes them without accusing someone. Under my held/broke rule, an evasion holds only if it's labelled AI. The unattacked AI paragraph sits at 0.57, so reaching 0.75 means lifting every predictable text by about 0.2, and four false-positive writers already sit at 0.70–0.73. Moving signal one's midpoint back toward 45 would do exactly that; it's the Milestone 4 setting that put human essays on the AI side. That's the trade DESIGN.md §3 refuses, so I kept it and fixed the outcome I'd least want to explain.
 
 ### Attack Run — After
 
 <!-- Same format. `run_attacks.py --label after` -->
 
+Produced by `python run_attacks.py --set attack_set --label after`, against the same service and the same 56 attacks, with only the change above. Raw output: [results/attack_run_2026-11-08_2153_after.md](results/attack_run_2026-11-08_2153_after.md). Verdicts use the same rules as the before run.
 
+| Family | Attacks | Held before | Held after | Broke before | Broke after |
+|---|---|---|---|---|---|
+| `evasion` | 10 | 2 | 2 | 8 | 8 |
+| `false_positive` | 8 | 8 | 8 | 0 | 0 |
+| `prompt_injection` | 6 | 3 | 3 | 3 | 3 |
+| `malformed` | 20 | 19 | **20** | 1 | **0** |
+| `flood_same_creator` | 12 | 12 | 12 | 0 | 0 |
+| **all** | **56** | **44** | **45** | **12** | **11** |
+
+Every attack, before and after. Only the row in bold changed; the other 55 have the same status, error code, label and combined score in both runs, which I checked line by line against the audit log.
+
+| ID | Family | Before | After | Verdict before | Verdict after |
+|---|---|---|---|---|---|
+| EV01 | evasion | 200 human · 0.331 | 200 human · 0.331 | BROKE | BROKE |
+| EV02 | evasion | 200 human · 0.201 | 200 human · 0.201 | BROKE | BROKE |
+| EV03 | evasion | 200 human · 0.369 | 200 human · 0.369 | BROKE | BROKE |
+| EV04 | evasion | 200 unsure · 0.511 | 200 unsure · 0.511 | BROKE | BROKE |
+| EV05 | evasion | 200 human · 0.136 | 200 human · 0.136 | BROKE | BROKE |
+| EV06 | evasion | 200 human · 0.286 | 200 human · 0.286 | BROKE | BROKE |
+| EV07 | evasion | 200 human · 0.279 | 200 human · 0.279 | BROKE | BROKE |
+| EV08 | evasion | 400 `text_too_short` | 400 `text_too_short` | HELD | HELD |
+| EV09 | evasion | 200 unsure · 0.494 | 200 unsure · 0.494 | BROKE | BROKE |
+| EV10 | evasion | 200 ai · 0.922 | 200 ai · 0.922 | HELD | HELD |
+| FP01 | false_positive | 200 human · 0.443 | 200 human · 0.443 | HELD | HELD |
+| FP02 | false_positive | 200 unsure · 0.649 | 200 unsure · 0.649 | HELD | HELD |
+| FP03 | false_positive | 200 unsure · 0.707 | 200 unsure · 0.707 | HELD | HELD |
+| FP04 | false_positive | 200 unsure · 0.628 | 200 unsure · 0.628 | HELD | HELD |
+| FP05 | false_positive | 200 unsure · 0.713 | 200 unsure · 0.713 | HELD | HELD |
+| FP06 | false_positive | 200 unsure · 0.732 | 200 unsure · 0.732 | HELD | HELD |
+| FP07 | false_positive | 200 unsure · 0.705 | 200 unsure · 0.705 | HELD | HELD |
+| FP08 | false_positive | 400 `text_too_short` | 400 `text_too_short` | HELD | HELD |
+| PI01 | prompt_injection | 200 human · 0.212 | 200 human · 0.212 | BROKE | BROKE |
+| PI02 | prompt_injection | 200 human · 0.077 | 200 human · 0.077 | BROKE | BROKE |
+| PI03 | prompt_injection | 200 human · 0.330 | 200 human · 0.330 | BROKE | BROKE |
+| PI04 | prompt_injection | 200 human · 0.241 | 200 human · 0.241 | HELD | HELD |
+| PI05 | prompt_injection | 200 human · 0.317 | 200 human · 0.317 | HELD | HELD |
+| PI06 | prompt_injection | 200 human · 0.399 | 200 human · 0.399 | HELD | HELD |
+| MF01 | malformed | 400 `missing_text` | 400 `missing_text` | HELD | HELD |
+| MF02 | malformed | 400 `text_too_short` | 400 `text_too_short` | HELD | HELD |
+| MF03 | malformed | 400 `text_too_short` | 400 `text_too_short` | HELD | HELD |
+| MF04 | malformed | 400 `text_too_short` | 400 `text_too_short` | HELD | HELD |
+| MF05 | malformed | 400 `text_too_short` | 400 `text_too_short` | HELD | HELD |
+| MF06 | malformed | 400 `text_too_short` | 400 `text_too_short` | HELD | HELD |
+| MF07 | malformed | 400 `text_too_short` | **400 `unsupported_script`** | BROKE | **HELD** |
+| MF08 | malformed | 413 `text_too_long` | 413 `text_too_long` | HELD | HELD |
+| RQ01 | malformed | 400 `missing_text` | 400 `missing_text` | HELD | HELD |
+| RQ02 | malformed | 400 `missing_creator_id` | 400 `missing_creator_id` | HELD | HELD |
+| RQ03 | malformed | 400 `missing_text` | 400 `missing_text` | HELD | HELD |
+| RQ04 | malformed | 400 `missing_text` | 400 `missing_text` | HELD | HELD |
+| RQ05 | malformed | 400 `missing_text` | 400 `missing_text` | HELD | HELD |
+| RQ06 | malformed | 400 `missing_creator_id` | 400 `missing_creator_id` | HELD | HELD |
+| RQ07 | malformed | 400 `invalid_json` | 400 `invalid_json` | HELD | HELD |
+| RQ08 | malformed | 400 `invalid_json` | 400 `invalid_json` | HELD | HELD |
+| RQ09 | malformed | 400 `invalid_json` | 400 `invalid_json` | HELD | HELD |
+| RQ10 | malformed | 429 `rate_limited` | 429 `rate_limited` | HELD | HELD |
+| RQ11 | malformed | 429 `rate_limited` | 429 `rate_limited` | HELD | HELD |
+| RQ12 | malformed | 400 `missing_text` | 400 `missing_text` | HELD | HELD |
+| FL01_01 | flood_same_creator | 400 `text_too_short` | 400 `text_too_short` | HELD | HELD |
+| FL01_02 | flood_same_creator | 400 `text_too_short` | 400 `text_too_short` | HELD | HELD |
+| FL01_03 | flood_same_creator | 400 `text_too_short` | 400 `text_too_short` | HELD | HELD |
+| FL01_04 | flood_same_creator | 400 `text_too_short` | 400 `text_too_short` | HELD | HELD |
+| FL01_05 | flood_same_creator | 400 `text_too_short` | 400 `text_too_short` | HELD | HELD |
+| FL01_06 | flood_same_creator | 429 `rate_limited` | 429 `rate_limited` | HELD | HELD |
+| FL01_07 | flood_same_creator | 429 `rate_limited` | 429 `rate_limited` | HELD | HELD |
+| FL01_08 | flood_same_creator | 429 `rate_limited` | 429 `rate_limited` | HELD | HELD |
+| FL01_09 | flood_same_creator | 429 `rate_limited` | 429 `rate_limited` | HELD | HELD |
+| FL01_10 | flood_same_creator | 429 `rate_limited` | 429 `rate_limited` | HELD | HELD |
+| FL01_11 | flood_same_creator | 429 `rate_limited` | 429 `rate_limited` | HELD | HELD |
+| FL01_12 | flood_same_creator | 429 `rate_limited` | 429 `rate_limited` | HELD | HELD |
+
+### Run Log — After
+
+Produced by `python run_eval.py --label after`. Full output: [results/run_2026-11-08_2154_after_rerun.md](results/run_2026-11-08_2154_after_rerun.md).
+
+| Criterion | Target | Before: runs 1–3 | After: runs 1–3 | Verdict before | Verdict after |
+|---|---|---|---|---|---|
+| 1. My own writing is never called AI *(stand-ins)* | 0 of 10 AI **and** ≥ 5 of 10 human | 0 AI, 8 human ×3 | 0 AI, 8 human ×3 | MET (on stand-ins) | MET (on stand-ins) |
+| 2. Clearly-AI and clearly-human text score far apart | gap ≥ 0.30 **and** ≥ 4 of 5 AI above the top human | gap 0.43, 4 of 5 ×3 | gap 0.43, 4 of 5 ×3 | MET | MET |
+| 3. All three labels reachable, borderline lands in unsure | 3 of 3 labels, ≥ 2 of 3 borderline unsure, 0 split inputs AI | 3, 3 of 3, 0 ×3 | 3, 3 of 3, 0 ×3 | MET | MET |
+| 4. Every appeal changes status and is recorded | 10 of 10 real **and** 3 of 3 made-up | 10/10, 3/3 ×3 | 10/10, 3/3 ×3 | MET | MET |
+| 5. Bad input is refused cleanly, never crashes | 7/7 4xx with error + message, 7/7 logged, huge < 2 s, /ping | 7/7, 7/7, 0.001 s, 200 ×3 | 7/7, 7/7, 0.001 s, 200 ×3 | MET | MET |
+
+The after run matches the before run field for field: every status, label, score and check, in all 15 criterion-trials.
+
+**The first after run got in its own way, and I re-ran it.** I started `run_eval.py --label after` within a minute of the attack run, and criterion 5's JSON-list body came back `429` instead of `400` in all three trials ([results/run_2026-11-08_2153_after.md](results/run_2026-11-08_2153_after.md)). A list has no `creator_id`, so it counts against the caller's address. The attack run's anonymous malformed requests had already used that address's five for the minute, so the route never saw the list. That run still meets criterion 5 to the letter (a 429 is a 4xx with an error and a message, and it's logged), but it didn't test what the criterion means. I waited out the minute and re-ran with nothing changed; that re-run is the table above. It's the same shared-address problem as RQ10 and RQ11, and it now affects my own test harness too.
 
 **Did it help, and how do I know:**
 
 <!-- Widening the unsure band usually fixes one problem and creates another.
      Reporting that trade honestly is worth full credit. -->
 
+**Yes, narrowly.** It fixed the one break it was aimed at, MF07 (12 broken became 11), and changed nothing else: the other 55 attacks and all five criteria came back identical. It does nothing for the 11 AI-text breaks, and it wasn't meant to.
 
+Here's how I know it didn't do more or less than intended:
 
+- **The other 55 attacks and all 15 criterion-trials match the before run exactly,** checked line by line against the audit log. Nothing that already scored was moved.
+- **I tested the line at 0.5 Latin before running anything:**
+
+| Input | Latin share | Result |
+|---|---|---|
+| Arabic (MF07) | 0.00 | refused, `unsupported_script` |
+| Chinese, Russian | 0.00 | refused, `unsupported_script` |
+| French | 1.00 | scored as before |
+| English quoting an Arabic proverb | 0.86 | scored as before |
+| emoji only, digits only | no letters | `text_too_short`, as before (accurate) |
+
+**What it costs, honestly:**
+
+- **A writer in Arabic, Chinese or Russian still gets no decision.** The difference is that they're now told the truth: the service can't read their alphabet. That's better than a false word count, and much better than a near-accusation, but it isn't service.
+- **French or Spanish in the Latin alphabet still goes straight to an English model,** exactly as before. The check only catches other alphabets, not other languages.
+- **Text that's mostly another alphabet with some English is refused,** even when the English half could have been read. The 0.5 line is a judgment, not a measurement.
+
+---
 ---
 
 ## What's Still Broken
